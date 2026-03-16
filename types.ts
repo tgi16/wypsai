@@ -16,7 +16,8 @@ export enum AppTab {
   AUTO_REPLY = 'auto-reply',
   STRATEGY_PARTNER = 'strategy-partner',
   CONTRACT_GEN = 'contract-gen',
-  CONCEPT_GEN = 'concept-gen'
+  CONCEPT_GEN = 'concept-gen',
+  SAVED_LIBRARY = 'saved-library'
 }
 
 export interface EngagementPost {

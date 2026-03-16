@@ -473,6 +473,11 @@ export const generateAutoReply = async (category: string): Promise<AutoReply> =>
 };
 
 export const generateContract = async (clientName: string, packageType: string, date: string, extraNotes: string): Promise<string> => {
+  const isOutdoorEvent = packageType.includes('မင်္ဂလာ') || packageType.includes('အလှူ') || packageType.toLowerCase().includes('outdoor') || packageType.toLowerCase().includes('event');
+  const extraTimeInstruction = isOutdoorEvent 
+    ? `\n    - ဤပွဲသည် ပြင်ပပွဲ (Outdoor/Event) ဖြစ်သောကြောင့် အောက်ပါ အချိန်ပိုကြေး သတ်မှတ်ချက်ကို မဖြစ်မနေ ထည့်သွင်းပေးပါ။\n      "အချိန်ပိုကြေး သတ်မှတ်ချက် (Extra Time Policy): သတ်မှတ်ချိန်ထက် ကျော်လွန်သွားပါက အချိန်ပိုကြေး အနေဖြင့် ၃၀ မိနစ် လျှင် - ၃၀,၀၀၀ ကျပ်၊ ၁ နာရီ လျှင် - ၅၀,၀၀၀ ကျပ် ထပ်ဆောင်း ပေးချေရမည် ဖြစ်ပါသည်။"`
+    : `\n    - ဤပွဲသည် Indoor ရိုက်ကူးရေး ဖြစ်သောကြောင့် အချိန်ပိုကြေး (Extra Time Policy) ကို စာချုပ်တွင် လုံးဝ (လုံးဝ) မထည့်ပါနှင့်။`;
+
   const response = await handleResponse(() => ai.models.generateContent({
     model: 'gemini-3.1-pro-preview',
     contents: `With You Photo Studio, Taunggyi အတွက် Customer နှင့် သဘောတူညီချက် စာချုပ် (Agreement / Terms & Conditions) တစ်ခု ရေးပေးပါ။
@@ -484,7 +489,7 @@ export const generateContract = async (clientName: string, packageType: string, 
     
     လိုအပ်ချက်များ:
     1. Professional ဖြစ်ပြီး တရားဝင်ဆန်သော မြန်မာစာသားဖြင့် ရေးပါ။ (English စကားလုံးများ လိုအပ်သလို သုံးနိုင်သည်)
-    2. "With You Photo Studio" ၏ စည်းမျဉ်းများဖြစ်သော (Limited Softcopy သာရမည်၊ အချိန်ပိုကြေး သတ်မှတ်ချက်များ) ကို သေချာစွာ ထည့်သွင်းပါ။
+    2. "With You Photo Studio" ၏ စည်းမျဉ်းများဖြစ်သော (Limited Softcopy သာရမည်) ကို သေချာစွာ ထည့်သွင်းပါ။${extraTimeInstruction}
     3. ငွေချေရမည့် ပုံစံ (Deposit, Full Payment) နှင့် ပုံအပ်မည့် အချိန် (Delivery Time) များကို ထည့်သွင်းပါ။
     4. အောက်ခြေတွင် Customer နှင့် Studio ဘက်မှ လက်မှတ်ထိုးရန် နေရာများ ထည့်ပေးပါ။
     

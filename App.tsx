@@ -20,6 +20,7 @@ import AutoReplyBuilder from './pages/AutoReplyBuilder';
 import StrategyPartner from './pages/StrategyPartner';
 import ContractGenerator from './pages/ContractGenerator';
 import ConceptGenerator from './pages/ConceptGenerator';
+import SavedLibrary from './pages/SavedLibrary';
 
 const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState<AppTab>(AppTab.DASHBOARD);
@@ -70,6 +71,8 @@ const App: React.FC = () => {
         return <ContractGenerator key="contract-gen" />;
       case AppTab.CONCEPT_GEN:
         return <ConceptGenerator key="concept-gen" />;
+      case AppTab.SAVED_LIBRARY:
+        return <SavedLibrary key="saved-library" />;
       default:
         return <Dashboard key="dashboard-default" onNavigate={setActiveTab} />;
     }

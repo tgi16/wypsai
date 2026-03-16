@@ -8,6 +8,12 @@ export const MENU_GROUPS = [
     ]
   },
   {
+    title: 'My Workspace',
+    items: [
+      { id: AppTab.SAVED_LIBRARY, label: 'Saved Library', icon: '💾' },
+    ]
+  },
+  {
     title: 'Content Creation',
     items: [
       { id: AppTab.CONTENT_GEN, label: 'ပိုစ်တ် ရေးပေးရန်', icon: '✍️' },

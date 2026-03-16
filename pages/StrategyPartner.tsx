@@ -1,14 +1,14 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { createStrategyChat } from '../geminiService';
 import ReactMarkdown from 'react-markdown';
+import { doc, getDoc, setDoc } from 'firebase/firestore';
+import { db } from '../firebase';
 
 interface Message {
   id: string;
   role: 'user' | 'model';
   content: string;
 }
-
-const STORAGE_KEY = 'strategy_partner_chat_history';
 
 const defaultGreeting: Message = {
   id: '1',
@@ -17,44 +17,60 @@ const defaultGreeting: Message = {
 };
 
 const StrategyPartner: React.FC = () => {
-  const [messages, setMessages] = useState<Message[]>(() => {
-    const saved = localStorage.getItem(STORAGE_KEY);
-    if (saved) {
-      try {
-        return JSON.parse(saved);
-      } catch (e) {
-        return [defaultGreeting];
-      }
-    }
-    return [defaultGreeting];
-  });
+  const [messages, setMessages] = useState<Message[]>([defaultGreeting]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [isInitializing, setIsInitializing] = useState(true);
   const [chatSession, setChatSession] = useState<any>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    // Convert local messages to Gemini history format
-    const history = messages.map(msg => ({
-      role: msg.role,
-      parts: [{ text: msg.content }]
-    }));
-    
-    // Initialize chat session with history
-    const session = createStrategyChat(history);
-    setChatSession(session);
-  }, []); // Only run on mount to initialize the session
+    const loadHistory = async () => {
+      try {
+        const docRef = doc(db, 'app_data', 'strategy_chat');
+        const docSnap = await getDoc(docRef);
+        
+        let loadedMessages = [defaultGreeting];
+        if (docSnap.exists() && docSnap.data().messages) {
+          loadedMessages = docSnap.data().messages;
+        }
+        
+        setMessages(loadedMessages);
 
-  // Save to local storage whenever messages change
-  useEffect(() => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(messages));
-  }, [messages]);
+        // Convert messages to Gemini history format
+        const history = loadedMessages.map(msg => ({
+          role: msg.role,
+          parts: [{ text: msg.content }]
+        }));
+        
+        // Initialize chat session with history
+        const session = createStrategyChat(history);
+        setChatSession(session);
+      } catch (error) {
+        console.error("Error loading chat history from Firebase:", error);
+        // Fallback to default
+        const session = createStrategyChat([{ role: 'model', parts: [{ text: defaultGreeting.content }] }]);
+        setChatSession(session);
+      } finally {
+        setIsInitializing(false);
+      }
+    };
 
-  const clearHistory = () => {
+    loadHistory();
+  }, []);
+
+  const clearHistory = async () => {
     if (window.confirm('ဆွေးနွေးထားသမျှကို ဖျက်ပစ်မှာ သေချာပါသလား?')) {
-      setMessages([defaultGreeting]);
+      const resetMessages = [defaultGreeting];
+      setMessages(resetMessages);
       const session = createStrategyChat([{ role: 'model', parts: [{ text: defaultGreeting.content }] }]);
       setChatSession(session);
+      
+      try {
+        await setDoc(doc(db, 'app_data', 'strategy_chat'), { messages: resetMessages });
+      } catch (error) {
+        console.error("Error clearing history in Firebase:", error);
+      }
     }
   };
 
@@ -79,8 +95,17 @@ const StrategyPartner: React.FC = () => {
       role: 'user',
       content: userMsg
     };
-    setMessages(prev => [...prev, newUserMsg]);
+    
+    const updatedMessages = [...messages, newUserMsg];
+    setMessages(updatedMessages);
     setIsLoading(true);
+
+    // Save user message to Firebase
+    try {
+      await setDoc(doc(db, 'app_data', 'strategy_chat'), { messages: updatedMessages });
+    } catch (error) {
+      console.error("Error saving to Firebase:", error);
+    }
 
     try {
       // Send to Gemini
@@ -92,7 +117,17 @@ const StrategyPartner: React.FC = () => {
         role: 'model',
         content: response.text
       };
-      setMessages(prev => [...prev, modelMsg]);
+      
+      const finalMessages = [...updatedMessages, modelMsg];
+      setMessages(finalMessages);
+      
+      // Save model message to Firebase
+      try {
+        await setDoc(doc(db, 'app_data', 'strategy_chat'), { messages: finalMessages });
+      } catch (error) {
+        console.error("Error saving to Firebase:", error);
+      }
+      
     } catch (error) {
       console.error("Chat error:", error);
       const errorMsg: Message = {

@@ -1,6 +1,7 @@
 import React, { useState, useRef } from 'react';
 import { generateContract } from '../geminiService';
 import ReactMarkdown from 'react-markdown';
+import { saveToLibrary } from '../firebase';
 
 const ContractGenerator: React.FC = () => {
   const [clientName, setClientName] = useState('');
@@ -8,6 +9,7 @@ const ContractGenerator: React.FC = () => {
   const [date, setDate] = useState('');
   const [extraNotes, setExtraNotes] = useState('');
   const [loading, setLoading] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
   const [contract, setContract] = useState<string | null>(null);
   const printRef = useRef<HTMLDivElement>(null);
 
@@ -35,6 +37,18 @@ const ContractGenerator: React.FC = () => {
       alert("စာချုပ် ထုတ်ပေးလို့ မရပါဘူး။ ခဏနေမှ ပြန်စမ်းကြည့်ပါ။");
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleSave = async () => {
+    if (!contract) return;
+    setIsSaving(true);
+    const success = await saveToLibrary(`Contract - ${clientName}`, 'Contract', contract);
+    setIsSaving(false);
+    if (success) {
+      alert('Saved Library သို့ သိမ်းဆည်းပြီးပါပြီ!');
+    } else {
+      alert('သိမ်းဆည်းရာတွင် အခက်အခဲရှိနေပါသည်။');
     }
   };
 
@@ -156,14 +170,23 @@ const ContractGenerator: React.FC = () => {
 
       {contract && (
         <div className="bg-slate-900/50 border border-slate-800 rounded-3xl p-6 md:p-8 animate-fade-in">
-          <div className="flex justify-between items-center mb-6">
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
             <h3 className="text-xl font-bold text-white">ထုတ်ပေးထားသော စာချုပ်</h3>
-            <button
-              onClick={executePrint}
-              className="bg-slate-800 hover:bg-slate-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2"
-            >
-              🖨️ Print / Save PDF
-            </button>
+            <div className="flex gap-3">
+              <button
+                onClick={handleSave}
+                disabled={isSaving}
+                className="bg-slate-800 hover:bg-slate-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2 disabled:opacity-50"
+              >
+                {isSaving ? 'Saving...' : '💾 Save to Library'}
+              </button>
+              <button
+                onClick={executePrint}
+                className="bg-amber-500 hover:bg-amber-400 text-slate-950 px-4 py-2 rounded-lg text-sm font-bold transition-colors flex items-center gap-2"
+              >
+                🖨️ Print / PDF
+              </button>
+            </div>
           </div>
           <div 
             ref={printRef}

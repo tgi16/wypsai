@@ -73,6 +73,12 @@ const handleResponse = async <T>(promiseFn: () => Promise<T>, retries = 3, backo
     if (error.message?.includes('429') || error.status === 429) {
       throw new Error("API Quota ခဏတာ ပြည့်သွားပါပြီ။ ၁ မိနစ်ခန့် စောင့်ပြီးမှ ပြန်လည် ကြိုးစားပေးပါ။ (Rate Limit Reached)");
     }
+
+    // Handle specific location error
+    if (error.message?.includes("User location is not supported") || 
+        JSON.stringify(error).includes("FAILED_PRECONDITION")) {
+      throw new Error("Gemini API သည် မြန်မာနိုင်ငံမှ တိုက်ရိုက်အသုံးပြုခြင်းကို ကန့်သတ်ထားပါသည်။ အသုံးပြုနိုင်ရန် VPN (USA/Singapore) ဖွင့်ပေးပါရန် မေတ္တာရပ်ခံအပ်ပါသည်။");
+    }
     
     throw error;
   }

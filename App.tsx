@@ -1,26 +1,35 @@
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, Suspense, lazy } from 'react';
 import { AppTab } from './types';
 import { MENU_GROUPS } from './constants';
 import Sidebar from './components/Sidebar';
-import Dashboard from './pages/Dashboard';
-import ContentGenerator from './pages/ContentGenerator';
-import StrategyPlanner from './pages/StrategyPlanner';
-import PricingGuide from './pages/PricingGuide';
-import SalesScriptManager from './pages/SalesScriptManager';
-import HashtagStrategy from './pages/HashtagStrategy';
-import PortfolioBio from './pages/PortfolioBio';
-import ReviewReply from './pages/ReviewReply';
-import SeasonalCampaign from './pages/SeasonalCampaign';
-import SevenDayPlan from './pages/SevenDayPlan';
-import EngagementPosts from './pages/EngagementPosts';
-import ClientGuides from './pages/ClientGuides';
-import PremiumPromotions from './pages/PremiumPromotions';
-import AutoReplyBuilder from './pages/AutoReplyBuilder';
-import StrategyPartner from './pages/StrategyPartner';
-import ContractGenerator from './pages/ContractGenerator';
-import ConceptGenerator from './pages/ConceptGenerator';
-import SavedLibrary from './pages/SavedLibrary';
+
+// Lazy load page components
+const Dashboard = lazy(() => import('./pages/Dashboard'));
+const ContentGenerator = lazy(() => import('./pages/ContentGenerator'));
+const StrategyPlanner = lazy(() => import('./pages/StrategyPlanner'));
+const PricingGuide = lazy(() => import('./pages/PricingGuide'));
+const SalesScriptManager = lazy(() => import('./pages/SalesScriptManager'));
+const HashtagStrategy = lazy(() => import('./pages/HashtagStrategy'));
+const PortfolioBio = lazy(() => import('./pages/PortfolioBio'));
+const ReviewReply = lazy(() => import('./pages/ReviewReply'));
+const SeasonalCampaign = lazy(() => import('./pages/SeasonalCampaign'));
+const SevenDayPlan = lazy(() => import('./pages/SevenDayPlan'));
+const EngagementPosts = lazy(() => import('./pages/EngagementPosts'));
+const ClientGuides = lazy(() => import('./pages/ClientGuides'));
+const PremiumPromotions = lazy(() => import('./pages/PremiumPromotions'));
+const AutoReplyBuilder = lazy(() => import('./pages/AutoReplyBuilder'));
+const StrategyPartner = lazy(() => import('./pages/StrategyPartner'));
+const ContractGenerator = lazy(() => import('./pages/ContractGenerator'));
+const ConceptGenerator = lazy(() => import('./pages/ConceptGenerator'));
+const SavedLibrary = lazy(() => import('./pages/SavedLibrary'));
+
+// Loading fallback component
+const PageLoader = () => (
+  <div className="flex items-center justify-center min-h-[60vh]">
+    <div className="w-10 h-10 border-4 border-amber-500 border-t-transparent rounded-full animate-spin" />
+  </div>
+);
 
 const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState<AppTab>(AppTab.DASHBOARD);
@@ -91,7 +100,9 @@ const App: React.FC = () => {
         className="flex-1 overflow-y-auto pb-24 md:pb-8 p-4 md:p-10 lg:p-12 scroll-smooth"
       >
         <div className="max-w-6xl mx-auto w-full transition-all duration-300">
-          {renderContent()}
+          <Suspense fallback={<PageLoader />}>
+            {renderContent()}
+          </Suspense>
         </div>
       </main>
 

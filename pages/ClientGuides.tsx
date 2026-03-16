@@ -2,7 +2,6 @@ import React, { useState, useEffect, useRef } from 'react';
 import { generateClientGuide } from '../geminiService';
 import { ClientGuide } from '../types';
 import Feedback from '../components/Feedback';
-import html2canvas from 'html2canvas';
 
 interface GuideHistory {
   id: string;
@@ -86,6 +85,9 @@ const ClientGuides: React.FC = () => {
     if (!printRef.current || !result) return;
     try {
       setToastMsg("ဓာတ်ပုံအဖြစ် ပြောင်းနေပါသည်... ⏳");
+      
+      // Dynamic import for html2canvas to optimize bundle size
+      const html2canvas = (await import('html2canvas')).default;
       
       // Temporarily adjust styles for better image capture if needed
       const canvas = await html2canvas(printRef.current, {

@@ -27,6 +27,7 @@ export default defineConfig(({ mode }) => {
               if (id.includes('node_modules')) {
                 if (id.includes('firebase')) return 'firebase';
                 if (id.includes('@google/genai')) return 'gemini';
+                if (id.includes('recharts') || id.includes('d3')) return 'charts';
                 return 'vendor';
               }
             }

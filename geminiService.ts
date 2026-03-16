@@ -2,7 +2,9 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import { MarketingContent, MarketTrend, DailyPlan, SalesScript, DailyContent, EngagementPost, ClientGuide, PremiumPromotion, AutoReply } from "./types";
 
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+// Support both standard Vite env vars and the injected process.env vars
+const apiKey = (import.meta as any).env?.VITE_GEMINI_API_KEY || process.env.API_KEY || process.env.GEMINI_API_KEY;
+const ai = new GoogleGenAI({ apiKey });
 
 const STUDIO_CONTEXT = `
 With You Photo Studio, Taunggyi (Myanmar)

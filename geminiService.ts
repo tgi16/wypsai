@@ -540,9 +540,10 @@ export const generateSeasonalCampaign = async (season: string): Promise<{ title:
   return JSON.parse(response.text || '{"title": "", "ideas": [], "promotion": ""}');
 };
 
-export const createStrategyChat = () => {
+export const createStrategyChat = (history?: any[]) => {
   return ai.chats.create({
     model: 'gemini-3.1-pro-preview',
+    history: history,
     config: {
       systemInstruction: `You are a highly experienced Business & Marketing Strategy Partner for "With You Photo Studio" located in Taunggyi, Myanmar.
       

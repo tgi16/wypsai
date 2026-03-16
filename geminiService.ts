@@ -1,10 +1,16 @@
 
-import { GoogleGenAI, Type } from "@google/genai";
 import { MarketingContent, MarketTrend, DailyPlan, SalesScript, DailyContent, EngagementPost, ClientGuide, PremiumPromotion, AutoReply } from "./types";
 
-// Support both standard Vite env vars and the injected process.env vars
-const apiKey = (import.meta as any).env?.VITE_GEMINI_API_KEY || process.env.API_KEY || process.env.GEMINI_API_KEY;
-const ai = new GoogleGenAI({ apiKey });
+enum Type {
+  TYPE_UNSPECIFIED = "TYPE_UNSPECIFIED",
+  STRING = "STRING",
+  NUMBER = "NUMBER",
+  INTEGER = "INTEGER",
+  BOOLEAN = "BOOLEAN",
+  ARRAY = "ARRAY",
+  OBJECT = "OBJECT",
+  NULL = "NULL",
+}
 
 const STUDIO_CONTEXT = `
 With You Photo Studio, Taunggyi (Myanmar)
@@ -57,6 +63,27 @@ User Feedback History:
 };
 
 /**
+ * Proxy call to the server-side Gemini endpoint
+ */
+const callGeminiProxy = async (params: { model: string, contents: any, config?: any }) => {
+  const response = await fetch("/api/gemini", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(params),
+  });
+
+  const data = await response.json();
+  
+  if (!response.ok) {
+    throw new Error(data.error || "Failed to call Gemini API");
+  }
+
+  return data;
+};
+
+/**
  * Handle API responses with automatic retries for rate limits (429)
  */
 const handleResponse = async <T>(promiseFn: () => Promise<T>, retries = 3, backoff = 2000): Promise<T> => {
@@ -76,8 +103,9 @@ const handleResponse = async <T>(promiseFn: () => Promise<T>, retries = 3, backo
 
     // Handle specific location error
     if (error.message?.includes("User location is not supported") || 
+        error.message?.includes("FAILED_PRECONDITION") ||
         JSON.stringify(error).includes("FAILED_PRECONDITION")) {
-      throw new Error("Gemini API သည် မြန်မာနိုင်ငံမှ တိုက်ရိုက်အသုံးပြုခြင်းကို ကန့်သတ်ထားပါသည်။ အသုံးပြုနိုင်ရန် VPN (USA/Singapore) ဖွင့်ပေးပါရန် မေတ္တာရပ်ခံအပ်ပါသည်။");
+      throw new Error("Gemini API သည် မြန်မာနိုင်ငံမှ တိုက်ရိုက်အသုံးပြုခြင်းကို ကန့်သတ်ထားပါသည်။ အသုံးပြုနိုင်ရန် VPN (USA/Singapore) ဖွင့်ပေးပါရန် သို့မဟုတ် Server Proxy ကို အသုံးပြုပေးပါရန် မေတ္တာရပ်ခံအပ်ပါသည်။");
     }
     
     throw error;
@@ -85,7 +113,7 @@ const handleResponse = async <T>(promiseFn: () => Promise<T>, retries = 3, backo
 };
 
 export const generateDailyMarketingPlan = async (): Promise<DailyPlan> => {
-  const response = await handleResponse(() => ai.models.generateContent({
+  const response = await handleResponse(() => callGeminiProxy({
     model: 'gemini-3-pro-preview',
     contents: `With You Photo Studio, Taunggyi အတွက် ဒီနေ့အတွက် အလွန် Viral ဖြစ်မည့် Marketing Strategy တစ်ခုကို မြန်မာဘာသာဖြင့်သာ ထုတ်ပေးပါ။ 
 
@@ -136,7 +164,7 @@ export const generateMarketingContent = async (
     });
   }
 
-  const response = await handleResponse(() => ai.models.generateContent({
+  const response = await handleResponse(() => callGeminiProxy({
     model: 'gemini-3-pro-preview',
     contents: { parts },
     config: {
@@ -164,7 +192,7 @@ export const generateSalesScripts = async (scenario: string, customQuestion?: st
        မှတ်ချက်: ဆွမ်းကပ် (480k)၊ အလှူ (390k/500k) တွေမှာ Unlimited Raw CD ပေးကြောင်း သေချာထည့်ပြောပါ။`
     : `Scenario: ${scenario} \n\n With You Photo Studio, Taunggyi အတွက် အကောင်းဆုံး Sales Script ကို "မြန်မာဘာသာဖြင့်သာ" ရေးပေးပါ။`;
 
-  const response = await handleResponse(() => ai.models.generateContent({
+  const response = await handleResponse(() => callGeminiProxy({
     model: 'gemini-3-pro-preview',
     contents: `Context: ${STUDIO_CONTEXT} ${getFeedbackContext()} \n\n ${prompt}`,
     config: {
@@ -183,7 +211,7 @@ export const generateSalesScripts = async (scenario: string, customQuestion?: st
 };
 
 export const getMarketInsights = async (): Promise<MarketTrend[]> => {
-  const response = await handleResponse(() => ai.models.generateContent({
+  const response = await handleResponse(() => callGeminiProxy({
     model: 'gemini-3-flash-preview',
     contents: "မြန်မာနိုင်ငံရှိ မင်္ဂလာဆောင်ဓာတ်ပုံစျေးကွက် Trends ၅ ခုကို မြန်မာဘာသာဖြင့် JSON format ဖြင့် ဖော်ပြပေးပါ။",
     config: {
@@ -205,7 +233,7 @@ export const getMarketInsights = async (): Promise<MarketTrend[]> => {
 };
 
 export const generateBusinessStrategy = async (goals: string): Promise<string> => {
-  const response = await handleResponse(() => ai.models.generateContent({
+  const response = await handleResponse(() => callGeminiProxy({
     model: 'gemini-3-pro-preview',
     contents: `With You Photo Studio, Taunggyi Strategy Planner. Goals: ${goals}. Studio: ${STUDIO_CONTEXT} ${getFeedbackContext()}. အစီအစဉ်အားလုံး မြန်မာဘာသာဖြင့်သာ ရေးပါ။ အင်္ဂလိပ်စာ လုံးဝ မပါရ။`,
   }));
@@ -213,7 +241,7 @@ export const generateBusinessStrategy = async (goals: string): Promise<string> =
 };
 
 export const generateHashtags = async (topic: string): Promise<{ tags: string[], strategy: string }> => {
-  const response = await handleResponse(() => ai.models.generateContent({
+  const response = await handleResponse(() => callGeminiProxy({
     model: 'gemini-3-flash-preview',
     contents: `With You Photo Studio, Taunggyi အတွက် Hashtag Strategy ထုတ်ပေးပါ။ 
     Topic: ${topic}
@@ -239,7 +267,7 @@ export const generateHashtags = async (topic: string): Promise<{ tags: string[],
 };
 
 export const generatePortfolioBio = async (style: string, details: string): Promise<{ bio: string, tips: string }> => {
-  const response = await handleResponse(() => ai.models.generateContent({
+  const response = await handleResponse(() => callGeminiProxy({
     model: 'gemini-3-flash-preview',
     contents: `With You Photo Studio, Taunggyi အတွက် Professional Portfolio Bio တစ်ခု ရေးပေးပါ။
     Style: ${style} (ဥပမာ- Professional, Friendly, Luxury)
@@ -266,7 +294,7 @@ export const generatePortfolioBio = async (style: string, details: string): Prom
 };
 
 export const generateReviewReply = async (review: string, rating: number): Promise<{ reply: string, engagementTip: string }> => {
-  const response = await handleResponse(() => ai.models.generateContent({
+  const response = await handleResponse(() => callGeminiProxy({
     model: 'gemini-3-flash-preview',
     contents: `Client ဆီက Review တစ်ခု ရထားပါတယ်။ အဲဒါကို Professional ဆန်စွာ ပြန်လည်ဖြေကြားပေးပါ။
     Review: "${review}"
@@ -293,7 +321,7 @@ export const generateReviewReply = async (review: string, rating: number): Promi
 };
 
 export const generateSevenDayPlan = async (focusArea: string): Promise<DailyContent[]> => {
-  const response = await handleResponse(() => ai.models.generateContent({
+  const response = await handleResponse(() => callGeminiProxy({
     model: 'gemini-3-pro-preview',
     contents: `With You Photo Studio, Taunggyi အတွက် ၇ ရက်စာ Facebook Content Plan တစ်ခု ဆွဲပေးပါ။
     
@@ -340,7 +368,7 @@ export const generateSevenDayPlan = async (focusArea: string): Promise<DailyCont
 };
 
 export const generateEngagementPost = async (topic: string, type: string): Promise<EngagementPost> => {
-  const response = await handleResponse(() => ai.models.generateContent({
+  const response = await handleResponse(() => callGeminiProxy({
     model: 'gemini-3-pro-preview',
     contents: `With You Photo Studio, Taunggyi အတွက် Facebook Reach ကျနေသည်ကို ပြန်ဆယ်ရန် (Engagement/Giveaway) ပိုစ့်တစ်ခု ရေးပေးပါ။
     
@@ -374,7 +402,7 @@ export const generateEngagementPost = async (topic: string, type: string): Promi
 };
 
 export const generateClientGuide = async (topic: string): Promise<ClientGuide> => {
-  const response = await handleResponse(() => ai.models.generateContent({
+  const response = await handleResponse(() => callGeminiProxy({
     model: 'gemini-3.1-pro-preview',
     contents: `With You Photo Studio, Taunggyi အတွက် Customer များ ကြိုတင်ပြင်ဆင်နိုင်ရန် Client Preparation Guide တစ်ခု ရေးပေးပါ။
     
@@ -408,7 +436,7 @@ export const generateClientGuide = async (topic: string): Promise<ClientGuide> =
 };
 
 export const generatePremiumPromotion = async (occasion: string): Promise<PremiumPromotion> => {
-  const response = await handleResponse(() => ai.models.generateContent({
+  const response = await handleResponse(() => callGeminiProxy({
     model: 'gemini-3-pro-preview',
     contents: `With You Photo Studio, Taunggyi အတွက် Premium Promotion Strategy တစ်ခု ရေးဆွဲပေးပါ။
     
@@ -441,7 +469,7 @@ export const generatePremiumPromotion = async (occasion: string): Promise<Premiu
 };
 
 export const generateAutoReply = async (category: string): Promise<AutoReply> => {
-  const response = await handleResponse(() => ai.models.generateContent({
+  const response = await handleResponse(() => callGeminiProxy({
     model: 'gemini-3-pro-preview',
     contents: `With You Photo Studio, Taunggyi ၏ Facebook Messenger အတွက် Auto-Reply / FAQ စာသားများ ရေးပေးပါ။
     
@@ -486,7 +514,7 @@ export const generateContract = async (clientName: string, packageType: string, 
     ? `\n    - ဤပွဲသည် ပြင်ပပွဲ (Outdoor/Event) ဖြစ်သောကြောင့် အောက်ပါ အချိန်ပိုကြေး သတ်မှတ်ချက်ကို မဖြစ်မနေ ထည့်သွင်းပေးပါ။\n      "အချိန်ပိုကြေး သတ်မှတ်ချက် (Extra Time Policy): သတ်မှတ်ချိန်ထက် ကျော်လွန်သွားပါက အချိန်ပိုကြေး အနေဖြင့် ၃၀ မိနစ် လျှင် - ၃၀,၀၀၀ ကျပ်၊ ၁ နာရီ လျှင် - ၅၀,၀၀၀ ကျပ် ထပ်ဆောင်း ပေးချေရမည် ဖြစ်ပါသည်။"`
     : `\n    - ဤပွဲသည် Indoor ရိုက်ကူးရေး ဖြစ်သောကြောင့် အချိန်ပိုကြေး (Extra Time Policy) ကို စာချုပ်တွင် လုံးဝ (လုံးဝ) မထည့်ပါနှင့်။`;
 
-  const response = await handleResponse(() => ai.models.generateContent({
+  const response = await handleResponse(() => callGeminiProxy({
     model: 'gemini-3.1-pro-preview',
     contents: `With You Photo Studio, Taunggyi အတွက် Customer နှင့် သဘောတူညီချက် စာချုပ် (Agreement / Terms & Conditions) တစ်ခု ရေးပေးပါ။
     
@@ -507,7 +535,7 @@ export const generateContract = async (clientName: string, packageType: string, 
 };
 
 export const generateConcept = async (vibe: string): Promise<string> => {
-  const response = await handleResponse(() => ai.models.generateContent({
+  const response = await handleResponse(() => callGeminiProxy({
     model: 'gemini-3.1-pro-preview',
     contents: `With You Photo Studio, Taunggyi အတွက် Photo Shoot Concept & Moodboard အကြံပြုချက်များ ရေးပေးပါ။
     
@@ -527,7 +555,7 @@ export const generateConcept = async (vibe: string): Promise<string> => {
 };
 
 export const generateSeasonalCampaign = async (season: string): Promise<{ title: string, ideas: string[], promotion: string }> => {
-  const response = await handleResponse(() => ai.models.generateContent({
+  const response = await handleResponse(() => callGeminiProxy({
     model: 'gemini-3-flash-preview',
     contents: `မြန်မာနိုင်ငံ၏ ${season} ပွဲတော်အတွက် With You Photo Studio အတွက် Marketing Campaign တစ်ခု ဆွဲပေးပါ။
     Context: ${STUDIO_CONTEXT} ${getFeedbackContext()}
@@ -553,25 +581,40 @@ export const generateSeasonalCampaign = async (season: string): Promise<{ title:
   return JSON.parse(response.text || '{"title": "", "ideas": [], "promotion": ""}');
 };
 
-export const createStrategyChat = (history?: any[]) => {
-  return ai.chats.create({
-    model: 'gemini-3.1-pro-preview',
-    history: history,
-    config: {
-      systemInstruction: `You are a highly experienced Business & Marketing Strategy Partner for "With You Photo Studio" located in Taunggyi, Myanmar.
+export const createStrategyChat = (initialHistory: any[] = []) => {
+  const history = [...initialHistory];
+  
+  return {
+    sendMessage: async (message: string) => {
+      const response = await handleResponse(() => callGeminiProxy({
+        model: 'gemini-3.1-pro-preview',
+        contents: [
+          ...history,
+          { role: 'user', parts: [{ text: message }] }
+        ],
+        config: {
+          systemInstruction: `You are a highly experienced Business & Marketing Strategy Partner for "With You Photo Studio" located in Taunggyi, Myanmar.
+          
+          Your goal is to act as a brainstorming partner, consultant, and problem solver for the studio owner.
+          
+          Context about the business:
+          ${STUDIO_CONTEXT}
+          
+          Guidelines for your responses:
+          1. Speak in natural, conversational Burmese (Myanmar language), but you can mix in English business/photography terms (e.g., marketing, brand awareness, premium, lighting, mood, tone).
+          2. Be encouraging, professional, and highly strategic.
+          3. Provide actionable advice, not just generic statements. If the user asks for a promotion idea, give specific mechanics. If they ask how to handle a difficult customer, give a specific script.
+          4. Always keep the "Premium Brand Image" in mind. Do not suggest cheap discounts that devalue the brand. Suggest value-adds instead.
+          5. Keep your responses concise and easy to read (use bullet points, emojis, and short paragraphs).
+          `,
+        }
+      }));
+
+      const text = response.text || '';
+      history.push({ role: 'user', parts: [{ text: message }] });
+      history.push({ role: 'model', parts: [{ text: text }] });
       
-      Your goal is to act as a brainstorming partner, consultant, and problem solver for the studio owner.
-      
-      Context about the business:
-      ${STUDIO_CONTEXT}
-      
-      Guidelines for your responses:
-      1. Speak in natural, conversational Burmese (Myanmar language), but you can mix in English business/photography terms (e.g., marketing, brand awareness, premium, lighting, mood, tone).
-      2. Be encouraging, professional, and highly strategic.
-      3. Provide actionable advice, not just generic statements. If the user asks for a promotion idea, give specific mechanics. If they ask how to handle a difficult customer, give a specific script.
-      4. Always keep the "Premium Brand Image" in mind. Do not suggest cheap discounts that devalue the brand. Suggest value-adds instead.
-      5. Keep your responses concise and easy to read (use bullet points, emojis, and short paragraphs).
-      `,
+      return { text };
     }
-  });
+  };
 };

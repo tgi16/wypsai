@@ -65,7 +65,7 @@ User Feedback History:
 /**
  * Proxy call to the server-side Gemini endpoint
  */
-const callGeminiProxy = async (params: { model: string, contents: any, config?: any }) => {
+export const callGeminiProxy = async (params: { model: string, contents: any, config?: any }) => {
   const response = await fetch("/api/gemini", {
     method: "POST",
     headers: {
@@ -74,14 +74,7 @@ const callGeminiProxy = async (params: { model: string, contents: any, config?: 
     body: JSON.stringify(params),
   });
 
-  const raw = await response.text();
-  let data: any;
-
-  try {
-    data = JSON.parse(raw);
-  } catch {
-    throw new Error(`Gemini proxy returned non-JSON response (${response.status}).`);
-  }
+  const data = await response.json();
   
   if (!response.ok) {
     throw new Error(data.error || "Failed to call Gemini API");
@@ -93,7 +86,7 @@ const callGeminiProxy = async (params: { model: string, contents: any, config?: 
 /**
  * Handle API responses with automatic retries for rate limits (429)
  */
-const handleResponse = async <T>(promiseFn: () => Promise<T>, retries = 3, backoff = 2000): Promise<T> => {
+export const handleResponse = async <T>(promiseFn: () => Promise<T>, retries = 3, backoff = 2000): Promise<T> => {
   try {
     return await promiseFn();
   } catch (error: any) {
@@ -182,10 +175,13 @@ export const generateMarketingContent = async (
           facebookCaption: { type: Type.STRING },
           tiktokVisualScript: { type: Type.STRING },
           tiktokCaption: { type: Type.STRING },
+          tiktokAudioStyle: { type: Type.STRING },
+          tiktokEditingStyle: { type: Type.STRING },
+          tiktokSceneBreakdown: { type: Type.ARRAY, items: { type: Type.STRING } },
           hashtags: { type: Type.ARRAY, items: { type: Type.STRING } },
           engagementTips: { type: Type.STRING }
         },
-        required: ["facebookCaption", "tiktokVisualScript", "tiktokCaption", "hashtags", "engagementTips"]
+        required: ["facebookCaption", "tiktokVisualScript", "tiktokCaption", "tiktokAudioStyle", "tiktokEditingStyle", "tiktokSceneBreakdown", "hashtags", "engagementTips"]
       }
     }
   }));

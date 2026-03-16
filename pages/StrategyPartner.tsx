@@ -13,8 +13,15 @@ interface Message {
 const defaultGreeting: Message = {
   id: '1',
   role: 'model',
-  content: 'မင်္ဂလာပါရှင်။ ကျွန်မက With You Photo Studio အတွက် Business & Marketing Strategy Partner ပါ။ ဒီနေ့ ဘယ်လိုကိစ္စလေးတွေ တိုင်ပင်ချင်ပါသလဲရှင်? (ဥပမာ - Promotion အသစ်လုပ်ဖို့၊ Customer တွေနဲ့ စကားပြောဖို့၊ Marketing Plan ဆွဲဖို့ စသဖြင့် အားမနာတမ်း မေးလို့ရပါတယ်နော်)'
+  content: 'မင်္ဂလာပါရှင်။ ကျွန်မက With You Photo Studio အတွက် Business & Marketing Strategy Partner ပါ။ ဒီနေ့ ဘယ်လိုကိစ္စလေးတွေ တိုင်ပင်ချင်ပါသလဲရှင်? \n\nအောက်က Quick Actions တွေကို သုံးပြီးတော့လည်း စတင်နိုင်ပါတယ်နော်။'
 };
+
+const QUICK_ACTIONS = [
+  { label: 'Viral TikTok Hooks', prompt: 'TikTok မှာ Viral ဖြစ်ဖို့ အတွက် အခု လက်ရှိ ခေတ်စားနေတဲ့ Hook ၅ ခုနဲ့ အဲ့ဒါကို စတူဒီယိုမှာ ဘယ်လို အသုံးချရမလဲ ဆိုတာ အကြံပေးပါ။' },
+  { label: 'Promotion Ideas', prompt: 'လာမည့်လအတွက် စတူဒီယိုမှာ လုပ်လို့ရမယ့် ဆန်းသစ်တဲ့ Promotion Idea ၃ ခုလောက် အကြံပေးပါ။' },
+  { label: 'Customer Script', prompt: 'Customer တစ်ယောက်က ဓာတ်ပုံတွေ ကြာနေလို့ စိတ်ဆိုးနေပါတယ်။ Professional ဆန်ဆန် ဘယ်လို ပြန်ဖြေရမလဲ Script ရေးပေးပါ။' },
+  { label: 'Brand Positioning', prompt: 'တောင်ကြီးမြို့မှာ တခြားစတူဒီယိုတွေထက် ပိုသာလွန်အောင် Brand ကို ဘယ်လို နေရာချသင့်သလဲ?' },
+];
 
 const StrategyPartner: React.FC = () => {
   const [messages, setMessages] = useState<Message[]>([defaultGreeting]);
@@ -82,11 +89,16 @@ const StrategyPartner: React.FC = () => {
     scrollToBottom();
   }, [messages]);
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!input.trim() || !chatSession || isLoading) return;
+  const handleAction = (prompt: string) => {
+    setInput(prompt);
+  };
 
-    const userMsg = input.trim();
+  const handleSubmit = async (e?: React.FormEvent, overrideInput?: string) => {
+    if (e) e.preventDefault();
+    const finalInput = overrideInput || input;
+    if (!finalInput.trim() || !chatSession || isLoading) return;
+
+    const userMsg = finalInput.trim();
     setInput('');
     
     // Add user message to UI
@@ -109,7 +121,7 @@ const StrategyPartner: React.FC = () => {
 
     try {
       // Send to Gemini
-      const response = await chatSession.sendMessage({ message: userMsg });
+      const response = await chatSession.sendMessage(userMsg);
       
       // Add model response to UI
       const modelMsg: Message = {
@@ -151,7 +163,7 @@ const StrategyPartner: React.FC = () => {
           </div>
           <div>
             <h2 className="text-xl font-black text-white">Strategy Partner AI</h2>
-            <p className="text-amber-500 text-xs font-bold tracking-widest uppercase">With You Photo Studio</p>
+            <p className="text-amber-500 text-xs font-bold tracking-widest uppercase">Your 24/7 Consultant</p>
           </div>
         </div>
         <button 
@@ -176,8 +188,8 @@ const StrategyPartner: React.FC = () => {
             <div 
               className={`max-w-[85%] md:max-w-[75%] rounded-2xl p-4 md:p-5 ${
                 msg.role === 'user' 
-                  ? 'bg-amber-500 text-slate-950 rounded-tr-sm' 
-                  : 'bg-slate-800 text-slate-200 rounded-tl-sm border border-slate-700'
+                  ? 'bg-amber-500 text-slate-950 rounded-tr-sm shadow-lg shadow-amber-500/20' 
+                  : 'bg-slate-800 text-slate-200 rounded-tl-sm border border-slate-700 shadow-lg shadow-black/20'
               }`}
             >
               {msg.role === 'model' ? (
@@ -203,8 +215,20 @@ const StrategyPartner: React.FC = () => {
         <div ref={messagesEndRef} />
       </div>
 
-      {/* Input Area */}
+      {/* Quick Actions & Input Area */}
       <div className="bg-slate-900/90 backdrop-blur-md border-t border-slate-800 p-4 z-10">
+        <div className="flex flex-wrap gap-2 mb-4 max-w-4xl mx-auto">
+          {QUICK_ACTIONS.map((action, idx) => (
+            <button
+              key={idx}
+              onClick={() => handleAction(action.prompt)}
+              className="text-[10px] md:text-xs font-bold bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 px-3 py-1.5 rounded-full transition-all hover:border-amber-500/50 hover:text-amber-500"
+            >
+              {action.label}
+            </button>
+          ))}
+        </div>
+
         <form onSubmit={handleSubmit} className="flex gap-3 max-w-4xl mx-auto relative">
           <input
             type="text"

@@ -7,7 +7,6 @@ import Sidebar from './components/Sidebar';
 // Lazy load page components
 const Dashboard = lazy(() => import('./pages/Dashboard'));
 const ContentGenerator = lazy(() => import('./pages/ContentGenerator'));
-const StrategyPlanner = lazy(() => import('./pages/StrategyPlanner'));
 const PricingGuide = lazy(() => import('./pages/PricingGuide'));
 const SalesScriptManager = lazy(() => import('./pages/SalesScriptManager'));
 const HashtagStrategy = lazy(() => import('./pages/HashtagStrategy'));
@@ -23,6 +22,8 @@ const StrategyPartner = lazy(() => import('./pages/StrategyPartner'));
 const ContractGenerator = lazy(() => import('./pages/ContractGenerator'));
 const ConceptGenerator = lazy(() => import('./pages/ConceptGenerator'));
 const SavedLibrary = lazy(() => import('./pages/SavedLibrary'));
+const CompetitorAnalysis = lazy(() => import('./pages/CompetitorAnalysis'));
+const DailyPlanPage = lazy(() => import('./pages/DailyPlan'));
 
 // Loading fallback component
 const PageLoader = () => (
@@ -53,7 +54,7 @@ const App: React.FC = () => {
       case AppTab.SALES_SCRIPTS:
         return <SalesScriptManager key="sales-scripts" />;
       case AppTab.STRATEGY:
-        return <StrategyPlanner key="strategy" />;
+        return <DailyPlanPage key="daily-plan" onNavigate={setActiveTab} />;
       case AppTab.PRICING:
         return <PricingGuide key="pricing" />;
       case AppTab.HASHTAGS:
@@ -82,6 +83,8 @@ const App: React.FC = () => {
         return <ConceptGenerator key="concept-gen" />;
       case AppTab.SAVED_LIBRARY:
         return <SavedLibrary key="saved-library" />;
+      case AppTab.COMPETITOR_ANALYSIS:
+        return <CompetitorAnalysis key="competitor-analysis" />;
       default:
         return <Dashboard key="dashboard-default" onNavigate={setActiveTab} />;
     }
@@ -110,7 +113,7 @@ const App: React.FC = () => {
       <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-slate-900/95 backdrop-blur-2xl border-t border-slate-800 px-2 py-3 z-50 flex justify-around items-center shadow-2xl shadow-black">
         <MobileNavItem id={AppTab.DASHBOARD} icon="🏠" label="Home" active={activeTab === AppTab.DASHBOARD && !isMobileMenuOpen} onClick={(id: AppTab) => { setActiveTab(id); setIsMobileMenuOpen(false); }} />
         <MobileNavItem id={AppTab.CONTENT_GEN} icon="✍️" label="Post" active={activeTab === AppTab.CONTENT_GEN && !isMobileMenuOpen} onClick={(id: AppTab) => { setActiveTab(id); setIsMobileMenuOpen(false); }} />
-        <MobileNavItem id={AppTab.STRATEGY} icon="📈" label="Plan" active={activeTab === AppTab.STRATEGY && !isMobileMenuOpen} onClick={(id: AppTab) => { setActiveTab(id); setIsMobileMenuOpen(false); }} />
+        <MobileNavItem id={AppTab.STRATEGY_PARTNER} icon="🧠" label="Partner" active={activeTab === AppTab.STRATEGY_PARTNER && !isMobileMenuOpen} onClick={(id: AppTab) => { setActiveTab(id); setIsMobileMenuOpen(false); }} />
         <button 
           onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
           className={`flex flex-col items-center gap-1 flex-1 transition-all duration-300 ${isMobileMenuOpen ? 'text-amber-500 scale-110' : 'text-slate-500'}`}

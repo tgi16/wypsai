@@ -378,10 +378,35 @@ const ContentGenerator: React.FC = () => {
                       <p className="text-xs text-slate-400 leading-relaxed italic">"{result.tiktokVisualScript}"</p>
                     </div>
 
+                    {/* Scene Breakdown */}
+                    <div className="bg-slate-950/40 p-5 rounded-2xl border border-slate-800/50">
+                      <span className="text-[10px] font-black text-pink-500 uppercase tracking-widest block mb-4">2. Scene Breakdown (အဆင့်ဆင့် ရိုက်ကူးရန်)</span>
+                      <div className="space-y-3">
+                        {result.tiktokSceneBreakdown.map((scene, i) => (
+                          <div key={i} className="flex gap-3">
+                            <span className="text-pink-500 font-black text-xs">{i + 1}.</span>
+                            <p className="text-xs text-slate-300">{scene}</p>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Style Section */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="bg-slate-950/40 p-5 rounded-2xl border border-slate-800/50">
+                        <span className="text-[10px] font-black text-blue-400 uppercase tracking-widest block mb-2">Audio Style</span>
+                        <p className="text-xs text-slate-400">{result.tiktokAudioStyle}</p>
+                      </div>
+                      <div className="bg-slate-950/40 p-5 rounded-2xl border border-slate-800/50">
+                        <span className="text-[10px] font-black text-purple-400 uppercase tracking-widest block mb-2">Editing Style</span>
+                        <p className="text-xs text-slate-400">{result.tiktokEditingStyle}</p>
+                      </div>
+                    </div>
+
                     {/* Caption Section */}
                     <div className="bg-slate-950/80 p-6 rounded-2xl border border-amber-500/10 shadow-inner">
                       <div className="flex justify-between items-center mb-4">
-                        <span className="text-[10px] font-black text-amber-500 uppercase tracking-widest">2. Post Caption (Copy & Paste)</span>
+                        <span className="text-[10px] font-black text-amber-500 uppercase tracking-widest">3. Post Caption (Copy & Paste)</span>
                       </div>
                       <p className="text-sm text-slate-100 font-bold mb-4">{result.tiktokCaption}</p>
                       <div className="flex flex-wrap gap-2 mb-6">

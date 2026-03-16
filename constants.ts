@@ -37,8 +37,9 @@ export const MENU_GROUPS = [
     title: 'Strategy & Brand',
     items: [
       { id: AppTab.STRATEGY_PARTNER, label: 'Strategy Partner AI', icon: '🧠' },
+      { id: AppTab.STRATEGY, label: 'Daily Strategic Plan', icon: '📅' },
+      { id: AppTab.COMPETITOR_ANALYSIS, label: 'Competitor Analysis', icon: '🔭' },
       { id: AppTab.CONCEPT_GEN, label: 'Moodboard & Concept', icon: '✨' },
-      { id: AppTab.STRATEGY, label: 'လုပ်ငန်းတိုးချဲ့ရန်', icon: '📈' },
       { id: AppTab.PRICING, label: 'စျေးနှုန်း သတ်မှတ်ချက်', icon: '💰' },
       { id: AppTab.HASHTAGS, label: 'Hashtag Strategy', icon: '#️⃣' },
       { id: AppTab.PORTFOLIO_BIO, label: 'Portfolio Bio', icon: '👤' },

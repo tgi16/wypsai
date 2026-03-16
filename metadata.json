@@ -1,0 +1,7 @@
+{
+  "name": "With You Studio Marketing Master",
+  "description": "An AI-powered marketing suite for Myanmar photographers to generate viral content, analyze trends, and grow their photography business.",
+  "requestFramePermissions": [
+    "camera"
+  ]
+}

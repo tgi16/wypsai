@@ -19,6 +19,7 @@ export const MENU_GROUPS = [
   {
     title: 'Customer Experience',
     items: [
+      { id: AppTab.CONTRACT_GEN, label: 'Agreement / Contract', icon: '📝' },
       { id: AppTab.CLIENT_GUIDES, label: 'Client Guides', icon: '📖' },
       { id: AppTab.PREMIUM_PROMOTIONS, label: 'Premium Promos', icon: '🎁' },
       { id: AppTab.AUTO_REPLY, label: 'Auto-Reply Builder', icon: '🤖' },
@@ -30,6 +31,7 @@ export const MENU_GROUPS = [
     title: 'Strategy & Brand',
     items: [
       { id: AppTab.STRATEGY_PARTNER, label: 'Strategy Partner AI', icon: '🧠' },
+      { id: AppTab.CONCEPT_GEN, label: 'Moodboard & Concept', icon: '✨' },
       { id: AppTab.STRATEGY, label: 'လုပ်ငန်းတိုးချဲ့ရန်', icon: '📈' },
       { id: AppTab.PRICING, label: 'စျေးနှုန်း သတ်မှတ်ချက်', icon: '💰' },
       { id: AppTab.HASHTAGS, label: 'Hashtag Strategy', icon: '#️⃣' },

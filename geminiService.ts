@@ -472,6 +472,47 @@ export const generateAutoReply = async (category: string): Promise<AutoReply> =>
   return JSON.parse(response.text || '{"category":"", "faqs":[]}');
 };
 
+export const generateContract = async (clientName: string, packageType: string, date: string, extraNotes: string): Promise<string> => {
+  const response = await handleResponse(() => ai.models.generateContent({
+    model: 'gemini-3.1-pro-preview',
+    contents: `With You Photo Studio, Taunggyi အတွက် Customer နှင့် သဘောတူညီချက် စာချုပ် (Agreement / Terms & Conditions) တစ်ခု ရေးပေးပါ။
+    
+    Customer Name: ${clientName}
+    Package / Service: ${packageType}
+    Date: ${date}
+    Extra Notes: ${extraNotes}
+    
+    လိုအပ်ချက်များ:
+    1. Professional ဖြစ်ပြီး တရားဝင်ဆန်သော မြန်မာစာသားဖြင့် ရေးပါ။ (English စကားလုံးများ လိုအပ်သလို သုံးနိုင်သည်)
+    2. "With You Photo Studio" ၏ စည်းမျဉ်းများဖြစ်သော (Limited Softcopy သာရမည်၊ အချိန်ပိုကြေး သတ်မှတ်ချက်များ) ကို သေချာစွာ ထည့်သွင်းပါ။
+    3. ငွေချေရမည့် ပုံစံ (Deposit, Full Payment) နှင့် ပုံအပ်မည့် အချိန် (Delivery Time) များကို ထည့်သွင်းပါ။
+    4. အောက်ခြေတွင် Customer နှင့် Studio ဘက်မှ လက်မှတ်ထိုးရန် နေရာများ ထည့်ပေးပါ။
+    
+    Context: ${STUDIO_CONTEXT}`,
+  }));
+  return response.text || '';
+};
+
+export const generateConcept = async (vibe: string): Promise<string> => {
+  const response = await handleResponse(() => ai.models.generateContent({
+    model: 'gemini-3.1-pro-preview',
+    contents: `With You Photo Studio, Taunggyi အတွက် Photo Shoot Concept & Moodboard အကြံပြုချက်များ ရေးပေးပါ။
+    
+    Customer လိုချင်သော Vibe / Theme: ${vibe}
+    
+    လိုအပ်ချက်များ:
+    1. ဤ Vibe နှင့် ကိုက်ညီမည့် Lighting Setup (အလင်းအမှောင် ပုံစံ)။
+    2. အဝတ်အစား အရောင်အသွေးနှင့် ပုံစံ (Outfit & Color Palette)။
+    3. အသုံးပြုသင့်သော Props များ (ဥပမာ - ပန်း၊ စာအုပ်၊ ခုံ)။
+    4. Pose အိုင်ဒီယာ ၃ ခု။
+    5. Photographer အတွက် အထူးသတိပြုရန် အချက်များ။
+    
+    မြန်မာလို ရှင်းလင်းစွာ ရေးပေးပါ။
+    Context: ${STUDIO_CONTEXT}`,
+  }));
+  return response.text || '';
+};
+
 export const generateSeasonalCampaign = async (season: string): Promise<{ title: string, ideas: string[], promotion: string }> => {
   const response = await handleResponse(() => ai.models.generateContent({
     model: 'gemini-3-flash-preview',

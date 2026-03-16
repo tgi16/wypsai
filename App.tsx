@@ -18,6 +18,8 @@ import ClientGuides from './pages/ClientGuides';
 import PremiumPromotions from './pages/PremiumPromotions';
 import AutoReplyBuilder from './pages/AutoReplyBuilder';
 import StrategyPartner from './pages/StrategyPartner';
+import ContractGenerator from './pages/ContractGenerator';
+import ConceptGenerator from './pages/ConceptGenerator';
 
 const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState<AppTab>(AppTab.DASHBOARD);
@@ -64,6 +66,10 @@ const App: React.FC = () => {
         return <AutoReplyBuilder key="auto-reply" />;
       case AppTab.STRATEGY_PARTNER:
         return <StrategyPartner key="strategy-partner" />;
+      case AppTab.CONTRACT_GEN:
+        return <ContractGenerator key="contract-gen" />;
+      case AppTab.CONCEPT_GEN:
+        return <ConceptGenerator key="concept-gen" />;
       default:
         return <Dashboard key="dashboard-default" onNavigate={setActiveTab} />;
     }

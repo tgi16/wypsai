@@ -1,6 +1,6 @@
-import { GoogleGenAI } from "@google/genai";
+const { GoogleGenAI } = require("@google/genai");
 
-export default async function handler(req: any, res: any) {
+module.exports = async function handler(req, res) {
   if (req.method !== "POST") {
     res.setHeader("Allow", "POST");
     return res.status(405).json({ error: "Method Not Allowed" });
@@ -12,7 +12,7 @@ export default async function handler(req: any, res: any) {
       return res.status(500).json({ error: "GEMINI_API_KEY is not configured on the server." });
     }
 
-    const { model, contents, config } = req.body ?? {};
+    const { model, contents, config } = req.body || {};
     const ai = new GoogleGenAI({ apiKey });
     const response = await ai.models.generateContent({
       model,
@@ -22,14 +22,14 @@ export default async function handler(req: any, res: any) {
 
     return res.status(200).json({
       text: response.text || "",
-      candidates: response.candidates ?? null,
-      usageMetadata: response.usageMetadata ?? null,
+      candidates: response.candidates || null,
+      usageMetadata: response.usageMetadata || null,
     });
-  } catch (error: any) {
+  } catch (error) {
     console.error("Vercel Gemini Error:", error);
     return res.status(error?.status || 500).json({
       error: error?.message || "Internal Server Error",
       details: error?.details || null,
     });
   }
-}
+};

@@ -1,5 +1,34 @@
 
 import { MarketingContent, MarketTrend, DailyPlan, SalesScript, DailyContent, EngagementPost, ClientGuide, PremiumPromotion, AutoReply } from "./types";
+import { PRICING, UsageMetadata } from "./constants";
+
+/**
+ * Track and store Gemini API usage cost in localStorage
+ */
+const trackUsage = (model: string, usage: UsageMetadata) => {
+  try {
+    const pricing = (PRICING as any)[model] || PRICING['gemini-3-flash-preview'];
+    const cost = (usage.promptTokenCount * pricing.input) + (usage.candidatesTokenCount * pricing.output);
+    
+    const today = new Date().toISOString().split('T')[0];
+    const savedUsage = JSON.parse(localStorage.getItem('gemini_usage_v2') || '{}');
+    
+    if (!savedUsage[today]) {
+      savedUsage[today] = { totalCost: 0, count: 0 };
+    }
+    
+    savedUsage[today].totalCost += cost;
+    savedUsage[today].count += 1;
+    savedUsage[today].lastCost = cost;
+    
+    localStorage.setItem('gemini_usage_v2', JSON.stringify(savedUsage));
+    
+    // Dispatch custom event to notify UI
+    window.dispatchEvent(new CustomEvent('gemini_usage_updated', { detail: savedUsage[today] }));
+  } catch (e) {
+    console.error("Failed to track usage:", e);
+  }
+};
 
 enum Type {
   TYPE_UNSPECIFIED = "TYPE_UNSPECIFIED",
@@ -65,7 +94,7 @@ User Feedback History:
 /**
  * Proxy call to the server-side Gemini endpoint
  */
-const callGeminiProxy = async (params: { model: string, contents: any, config?: any }) => {
+export const callGeminiProxy = async (params: { model: string, contents: any, config?: any }) => {
   const response = await fetch("/api/gemini", {
     method: "POST",
     headers: {
@@ -74,17 +103,15 @@ const callGeminiProxy = async (params: { model: string, contents: any, config?: 
     body: JSON.stringify(params),
   });
 
-  const raw = await response.text();
-  let data: any;
-
-  try {
-    data = JSON.parse(raw);
-  } catch {
-    throw new Error(`Gemini proxy returned non-JSON response (${response.status}).`);
-  }
+  const data = await response.json();
   
   if (!response.ok) {
     throw new Error(data.error || "Failed to call Gemini API");
+  }
+
+  // Track usage if metadata is available
+  if (data.usageMetadata) {
+    trackUsage(params.model, data.usageMetadata);
   }
 
   return data;
@@ -93,7 +120,7 @@ const callGeminiProxy = async (params: { model: string, contents: any, config?: 
 /**
  * Handle API responses with automatic retries for rate limits (429)
  */
-const handleResponse = async <T>(promiseFn: () => Promise<T>, retries = 3, backoff = 2000): Promise<T> => {
+export const handleResponse = async <T>(promiseFn: () => Promise<T>, retries = 3, backoff = 2000): Promise<T> => {
   try {
     return await promiseFn();
   } catch (error: any) {
@@ -182,10 +209,13 @@ export const generateMarketingContent = async (
           facebookCaption: { type: Type.STRING },
           tiktokVisualScript: { type: Type.STRING },
           tiktokCaption: { type: Type.STRING },
+          tiktokAudioStyle: { type: Type.STRING },
+          tiktokEditingStyle: { type: Type.STRING },
+          tiktokSceneBreakdown: { type: Type.ARRAY, items: { type: Type.STRING } },
           hashtags: { type: Type.ARRAY, items: { type: Type.STRING } },
           engagementTips: { type: Type.STRING }
         },
-        required: ["facebookCaption", "tiktokVisualScript", "tiktokCaption", "hashtags", "engagementTips"]
+        required: ["facebookCaption", "tiktokVisualScript", "tiktokCaption", "tiktokAudioStyle", "tiktokEditingStyle", "tiktokSceneBreakdown", "hashtags", "engagementTips"]
       }
     }
   }));
@@ -586,6 +616,27 @@ export const generateSeasonalCampaign = async (season: string): Promise<{ title:
     }
   }));
   return JSON.parse(response.text || '{"title": "", "ideas": [], "promotion": ""}');
+};
+
+export const generateSpeech = async (text: string, voiceName: 'Puck' | 'Charon' | 'Kore' | 'Fenrir' | 'Zephyr' = 'Kore'): Promise<string> => {
+  const response = await handleResponse(() => callGeminiProxy({
+    model: 'gemini-2.5-flash-preview-tts',
+    contents: [{ parts: [{ text: `TTS the following text clearly and professionally: ${text}` }] }],
+    config: {
+      responseModalities: ['AUDIO'],
+      speechConfig: {
+        voiceConfig: {
+          prebuiltVoiceConfig: { voiceName },
+        },
+      },
+    },
+  }));
+
+  const base64Audio = response.response?.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
+  if (!base64Audio) {
+    throw new Error("Failed to generate audio data");
+  }
+  return base64Audio;
 };
 
 export const createStrategyChat = (initialHistory: any[] = []) => {

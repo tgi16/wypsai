@@ -3,11 +3,11 @@ import React, { useState, useEffect, useRef, Suspense, lazy } from 'react';
 import { AppTab } from './types';
 import { MENU_GROUPS } from './constants';
 import Sidebar from './components/Sidebar';
+import { FirebaseProvider } from './components/FirebaseContext';
 
 // Lazy load page components
 const Dashboard = lazy(() => import('./pages/Dashboard'));
 const ContentGenerator = lazy(() => import('./pages/ContentGenerator'));
-const StrategyPlanner = lazy(() => import('./pages/StrategyPlanner'));
 const PricingGuide = lazy(() => import('./pages/PricingGuide'));
 const SalesScriptManager = lazy(() => import('./pages/SalesScriptManager'));
 const HashtagStrategy = lazy(() => import('./pages/HashtagStrategy'));
@@ -19,10 +19,13 @@ const EngagementPosts = lazy(() => import('./pages/EngagementPosts'));
 const ClientGuides = lazy(() => import('./pages/ClientGuides'));
 const PremiumPromotions = lazy(() => import('./pages/PremiumPromotions'));
 const AutoReplyBuilder = lazy(() => import('./pages/AutoReplyBuilder'));
+const VoiceoverGenerator = lazy(() => import('./pages/VoiceoverGenerator'));
 const StrategyPartner = lazy(() => import('./pages/StrategyPartner'));
 const ContractGenerator = lazy(() => import('./pages/ContractGenerator'));
 const ConceptGenerator = lazy(() => import('./pages/ConceptGenerator'));
 const SavedLibrary = lazy(() => import('./pages/SavedLibrary'));
+const CompetitorAnalysis = lazy(() => import('./pages/CompetitorAnalysis'));
+const DailyPlanPage = lazy(() => import('./pages/DailyPlan'));
 
 // Loading fallback component
 const PageLoader = () => (
@@ -34,7 +37,28 @@ const PageLoader = () => (
 const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState<AppTab>(AppTab.DASHBOARD);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [usage, setUsage] = useState({ totalCost: 0, count: 0, lastCost: 0 });
   const mainRef = useRef<HTMLDivElement>(null);
+
+  const loadUsage = () => {
+    const today = new Date().toISOString().split('T')[0];
+    const savedUsage = JSON.parse(localStorage.getItem('gemini_usage_v2') || '{}');
+    if (savedUsage[today]) {
+      setUsage(savedUsage[today]);
+    }
+  };
+
+  useEffect(() => {
+    loadUsage();
+    const handleUpdate = (event: any) => {
+      setUsage(event.detail);
+    };
+    window.addEventListener('gemini_usage_updated', handleUpdate);
+    return () => window.removeEventListener('gemini_usage_updated', handleUpdate);
+  }, []);
+
+  const budget = 5.0;
+  const percentage = Math.min((usage.totalCost / budget) * 100, 100);
 
   // Reset scroll to top when tab changes to prevent layout ghosting
   useEffect(() => {
@@ -49,11 +73,11 @@ const App: React.FC = () => {
       case AppTab.DASHBOARD:
         return <Dashboard key="dashboard" onNavigate={setActiveTab} />;
       case AppTab.CONTENT_GEN:
-        return <ContentGenerator key="content-gen" />;
+        return <ContentGenerator key="content-gen" onNavigate={setActiveTab} />;
       case AppTab.SALES_SCRIPTS:
         return <SalesScriptManager key="sales-scripts" />;
       case AppTab.STRATEGY:
-        return <StrategyPlanner key="strategy" />;
+        return <DailyPlanPage key="daily-plan" onNavigate={setActiveTab} />;
       case AppTab.PRICING:
         return <PricingGuide key="pricing" />;
       case AppTab.HASHTAGS:
@@ -74,6 +98,8 @@ const App: React.FC = () => {
         return <PremiumPromotions key="premium-promotions" />;
       case AppTab.AUTO_REPLY:
         return <AutoReplyBuilder key="auto-reply" />;
+      case AppTab.VOICEOVER_GEN:
+        return <VoiceoverGenerator key="voiceover-gen" />;
       case AppTab.STRATEGY_PARTNER:
         return <StrategyPartner key="strategy-partner" />;
       case AppTab.CONTRACT_GEN:
@@ -82,6 +108,8 @@ const App: React.FC = () => {
         return <ConceptGenerator key="concept-gen" />;
       case AppTab.SAVED_LIBRARY:
         return <SavedLibrary key="saved-library" />;
+      case AppTab.COMPETITOR_ANALYSIS:
+        return <CompetitorAnalysis key="competitor-analysis" />;
       default:
         return <Dashboard key="dashboard-default" onNavigate={setActiveTab} />;
     }
@@ -110,7 +138,7 @@ const App: React.FC = () => {
       <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-slate-900/95 backdrop-blur-2xl border-t border-slate-800 px-2 py-3 z-50 flex justify-around items-center shadow-2xl shadow-black">
         <MobileNavItem id={AppTab.DASHBOARD} icon="🏠" label="Home" active={activeTab === AppTab.DASHBOARD && !isMobileMenuOpen} onClick={(id: AppTab) => { setActiveTab(id); setIsMobileMenuOpen(false); }} />
         <MobileNavItem id={AppTab.CONTENT_GEN} icon="✍️" label="Post" active={activeTab === AppTab.CONTENT_GEN && !isMobileMenuOpen} onClick={(id: AppTab) => { setActiveTab(id); setIsMobileMenuOpen(false); }} />
-        <MobileNavItem id={AppTab.STRATEGY} icon="📈" label="Plan" active={activeTab === AppTab.STRATEGY && !isMobileMenuOpen} onClick={(id: AppTab) => { setActiveTab(id); setIsMobileMenuOpen(false); }} />
+        <MobileNavItem id={AppTab.STRATEGY_PARTNER} icon="🧠" label="Partner" active={activeTab === AppTab.STRATEGY_PARTNER && !isMobileMenuOpen} onClick={(id: AppTab) => { setActiveTab(id); setIsMobileMenuOpen(false); }} />
         <button 
           onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
           className={`flex flex-col items-center gap-1 flex-1 transition-all duration-300 ${isMobileMenuOpen ? 'text-amber-500 scale-110' : 'text-slate-500'}`}
@@ -149,9 +177,28 @@ const App: React.FC = () => {
                    </div>
                 </div>
              ))}
+
+             {/* Mobile Usage Tracker */}
+             <div className="col-span-2 mt-4 p-6 bg-slate-900/50 rounded-[2rem] border border-slate-800/50">
+                <div className="flex justify-between items-center mb-3">
+                  <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">API Usage (Today)</span>
+                  <span className="text-xs font-black text-amber-500">${usage.totalCost.toFixed(3)} / $5</span>
+                </div>
+                <div className="h-2 bg-slate-950 rounded-full overflow-hidden mb-3">
+                  <div 
+                    className={`h-full transition-all duration-1000 ${percentage > 80 ? 'bg-red-500' : percentage > 50 ? 'bg-amber-500' : 'bg-emerald-500'}`}
+                    style={{ width: `${percentage}%` }}
+                  />
+                </div>
+                <div className="flex justify-between text-[10px] font-bold text-slate-400">
+                  <span>{usage.count} calls made</span>
+                  <span className="text-slate-600">Limit: $5.00</span>
+                </div>
+             </div>
           </div>
         </div>
       )}
+
     </div>
   );
 };
@@ -168,4 +215,10 @@ const MobileNavItem = ({ id, icon, label, active, onClick }: any) => (
   </button>
 );
 
-export default App;
+const AppWrapper: React.FC = () => (
+  <FirebaseProvider>
+    <App />
+  </FirebaseProvider>
+);
+
+export default AppWrapper;

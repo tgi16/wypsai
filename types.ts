@@ -17,7 +17,9 @@ export enum AppTab {
   STRATEGY_PARTNER = 'strategy-partner',
   CONTRACT_GEN = 'contract-gen',
   CONCEPT_GEN = 'concept-gen',
-  SAVED_LIBRARY = 'saved-library'
+  SAVED_LIBRARY = 'saved-library',
+  COMPETITOR_ANALYSIS = 'competitor-analysis',
+  VOICEOVER_GEN = 'voiceover-gen'
 }
 
 export interface EngagementPost {
@@ -62,6 +64,9 @@ export interface MarketingContent {
   facebookCaption: string;
   tiktokVisualScript: string;
   tiktokCaption: string;
+  tiktokAudioStyle: string;
+  tiktokEditingStyle: string;
+  tiktokSceneBreakdown: string[];
   hashtags: string[];
   engagementTips: string;
 }

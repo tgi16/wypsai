@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { generateMarketingContent } from '../geminiService';
-import { MarketingContent } from '../types';
+import { MarketingContent, AppTab } from '../types';
 import Feedback from '../components/Feedback';
 import imageCompression from 'browser-image-compression';
 
@@ -12,7 +12,11 @@ interface ContentHistory {
   content: MarketingContent;
 }
 
-const ContentGenerator: React.FC = () => {
+interface ContentGeneratorProps {
+  onNavigate?: (tab: AppTab) => void;
+}
+
+const ContentGenerator: React.FC<ContentGeneratorProps> = ({ onNavigate }) => {
   const [description, setDescription] = useState('');
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<MarketingContent | null>(null);
@@ -163,6 +167,13 @@ const ContentGenerator: React.FC = () => {
     navigator.clipboard.writeText(text);
     setToastMsg(`${label} ကို ကူးယူပြီးပါပြီ!`);
     setTimeout(() => setToastMsg(''), 3000);
+  };
+
+  const goToVoiceover = (script: string) => {
+    localStorage.setItem('wyp_tts_script', script);
+    if (onNavigate) {
+      onNavigate(AppTab.VOICEOVER_GEN);
+    }
   };
 
   return (
@@ -373,15 +384,45 @@ const ContentGenerator: React.FC = () => {
                     <div className="bg-slate-950/40 p-5 rounded-2xl border border-slate-800/50">
                       <div className="flex justify-between items-center mb-4">
                         <span className="text-[10px] font-black text-pink-500 uppercase tracking-widest">1. Visual Script (ဘာရိုက်မလဲ)</span>
-                        <button onClick={() => copyToClipboard(result.tiktokVisualScript, "TikTok Script")} className="text-[10px] font-black text-slate-500 hover:text-white transition-colors">COPY SCRIPT</button>
+                        <div className="flex gap-4">
+                          <button onClick={() => goToVoiceover(result.tiktokVisualScript)} className="text-[10px] font-black text-amber-500 hover:text-amber-400 transition-colors flex items-center gap-1">
+                            <span>🎙️</span> GENERATE VOICEOVER
+                          </button>
+                          <button onClick={() => copyToClipboard(result.tiktokVisualScript, "TikTok Script")} className="text-[10px] font-black text-slate-500 hover:text-white transition-colors">COPY SCRIPT</button>
+                        </div>
                       </div>
                       <p className="text-xs text-slate-400 leading-relaxed italic">"{result.tiktokVisualScript}"</p>
+                    </div>
+
+                    {/* Scene Breakdown */}
+                    <div className="bg-slate-950/40 p-5 rounded-2xl border border-slate-800/50">
+                      <span className="text-[10px] font-black text-pink-500 uppercase tracking-widest block mb-4">2. Scene Breakdown (အဆင့်ဆင့် ရိုက်ကူးရန်)</span>
+                      <div className="space-y-3">
+                        {result.tiktokSceneBreakdown.map((scene, i) => (
+                          <div key={i} className="flex gap-3">
+                            <span className="text-pink-500 font-black text-xs">{i + 1}.</span>
+                            <p className="text-xs text-slate-300">{scene}</p>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Style Section */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="bg-slate-950/40 p-5 rounded-2xl border border-slate-800/50">
+                        <span className="text-[10px] font-black text-blue-400 uppercase tracking-widest block mb-2">Audio Style</span>
+                        <p className="text-xs text-slate-400">{result.tiktokAudioStyle}</p>
+                      </div>
+                      <div className="bg-slate-950/40 p-5 rounded-2xl border border-slate-800/50">
+                        <span className="text-[10px] font-black text-purple-400 uppercase tracking-widest block mb-2">Editing Style</span>
+                        <p className="text-xs text-slate-400">{result.tiktokEditingStyle}</p>
+                      </div>
                     </div>
 
                     {/* Caption Section */}
                     <div className="bg-slate-950/80 p-6 rounded-2xl border border-amber-500/10 shadow-inner">
                       <div className="flex justify-between items-center mb-4">
-                        <span className="text-[10px] font-black text-amber-500 uppercase tracking-widest">2. Post Caption (Copy & Paste)</span>
+                        <span className="text-[10px] font-black text-amber-500 uppercase tracking-widest">3. Post Caption (Copy & Paste)</span>
                       </div>
                       <p className="text-sm text-slate-100 font-bold mb-4">{result.tiktokCaption}</p>
                       <div className="flex flex-wrap gap-2 mb-6">

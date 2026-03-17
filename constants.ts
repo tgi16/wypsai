@@ -37,6 +37,7 @@ export const MENU_GROUPS = [
   {
     title: 'Strategy & Brand',
     items: [
+      { id: AppTab.MARKETING_AUDIT, label: 'Marketing Audit', icon: '📊' },
       { id: AppTab.STRATEGY_PARTNER, label: 'Strategy Partner AI', icon: '🧠' },
       { id: AppTab.STRATEGY, label: 'Daily Strategic Plan', icon: '📅' },
       { id: AppTab.COMPETITOR_ANALYSIS, label: 'Competitor Analysis', icon: '🔭' },

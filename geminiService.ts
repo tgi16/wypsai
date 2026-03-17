@@ -638,6 +638,52 @@ export const generateSpeech = async (text: string, voiceName: 'Puck' | 'Charon' 
   return base64Audio;
 };
 
+export const runMarketingAudit = async (data: string, imageBase64?: string): Promise<{
+  summary: string;
+  strengths: string[];
+  weaknesses: string[];
+  recommendations: { topic: string; reason: string; strategy: string }[];
+}> => {
+  const parts: any[] = [{ text: `Analyze the following Facebook/TikTok marketing insights data for "With You Photo Studio" and provide a strategic audit.
+    
+    Text Data:
+    ${data}
+    
+    Provide the response in JSON format with the following structure:
+    {
+      "summary": "A concise summary of the current performance in Burmese.",
+      "strengths": ["List of 3 strengths in Burmese"],
+      "weaknesses": ["List of 3 weaknesses in Burmese"],
+      "recommendations": [
+        {
+          "topic": "Specific post topic or content idea in Burmese",
+          "reason": "Why this is recommended based on the data in Burmese",
+          "strategy": "Brief execution strategy in Burmese"
+        }
+      ]
+    }
+    
+    Keep the tone professional, strategic, and encouraging.` }];
+
+  if (imageBase64) {
+    parts.push({
+      inlineData: {
+        mimeType: 'image/png',
+        data: imageBase64.split(',')[1] || imageBase64
+      }
+    });
+  }
+
+  const response = await handleResponse(() => callGeminiProxy({
+    model: 'gemini-3.1-pro-preview',
+    contents: [{ parts }],
+    config: {
+      responseMimeType: 'application/json',
+    },
+  }));
+  return JSON.parse(response.text || '{"summary": "", "strengths": [], "weaknesses": [], "recommendations": []}');
+};
+
 export const createStrategyChat = (initialHistory: any[] = []) => {
   const history = [...initialHistory];
   

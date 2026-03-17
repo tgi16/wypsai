@@ -19,7 +19,8 @@ export enum AppTab {
   CONCEPT_GEN = 'concept-gen',
   SAVED_LIBRARY = 'saved-library',
   COMPETITOR_ANALYSIS = 'competitor-analysis',
-  VOICEOVER_GEN = 'voiceover-gen'
+  VOICEOVER_GEN = 'voiceover-gen',
+  MARKETING_AUDIT = 'marketing-audit'
 }
 
 export interface EngagementPost {

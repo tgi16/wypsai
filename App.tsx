@@ -26,6 +26,7 @@ const ConceptGenerator = lazy(() => import('./pages/ConceptGenerator'));
 const SavedLibrary = lazy(() => import('./pages/SavedLibrary'));
 const CompetitorAnalysis = lazy(() => import('./pages/CompetitorAnalysis'));
 const DailyPlanPage = lazy(() => import('./pages/DailyPlan'));
+const MarketingAudit = lazy(() => import('./pages/MarketingAudit'));
 
 // Loading fallback component
 const PageLoader = () => (
@@ -110,6 +111,11 @@ const App: React.FC = () => {
         return <SavedLibrary key="saved-library" />;
       case AppTab.COMPETITOR_ANALYSIS:
         return <CompetitorAnalysis key="competitor-analysis" />;
+      case AppTab.MARKETING_AUDIT:
+        return <MarketingAudit key="marketing-audit" onNavigateToContent={(topic) => {
+          // Pass topic to content generator via some state or just navigate
+          setActiveTab(AppTab.CONTENT_GEN);
+        }} />;
       default:
         return <Dashboard key="dashboard-default" onNavigate={setActiveTab} />;
     }

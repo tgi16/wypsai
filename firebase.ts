@@ -6,7 +6,6 @@ import {
   GoogleAuthProvider,
   setPersistence,
   signInWithPopup,
-  signInWithRedirect,
   signOut,
 } from 'firebase/auth';
 
@@ -20,25 +19,9 @@ export const auth = getAuth(app);
 export const googleProvider = new GoogleAuthProvider();
 googleProvider.setCustomParameters({ prompt: 'select_account' });
 
-const shouldUseRedirectLogin = () => {
-  if (typeof window === 'undefined') return false;
-
-  const ua = window.navigator.userAgent.toLowerCase();
-  const isIOS = /iphone|ipad|ipod/.test(ua);
-  const isAndroid = ua.includes('android');
-  const isMobile = isIOS || isAndroid || window.innerWidth < 768;
-
-  return isMobile;
-};
-
 export const loginWithGoogle = async () => {
   try {
     await setPersistence(auth, browserLocalPersistence);
-
-    if (shouldUseRedirectLogin()) {
-      await signInWithRedirect(auth, googleProvider);
-      return null;
-    }
 
     const result = await signInWithPopup(auth, googleProvider);
     return result.user ?? null;

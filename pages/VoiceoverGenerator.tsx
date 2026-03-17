@@ -1,5 +1,5 @@
 
-import React, { useState, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { generateSpeech } from '../geminiService';
 
 const VOICES = [
@@ -8,16 +8,49 @@ const VOICES = [
   { id: 'Puck', name: 'Puck (တက်ကြွသော အသံ)', gender: 'Neutral' },
   { id: 'Charon', name: 'Charon (တည်ငြိမ်သော အသံ)', gender: 'Male' },
   { id: 'Fenrir', name: 'Fenrir (နက်ရှိုင်းသော အသံ)', gender: 'Male' },
-];
+] as const;
+
+type Voice = typeof VOICES[number];
+
+const base64ToUint8Array = (base64: string): Uint8Array => {
+  const binary = atob(base64);
+  return Uint8Array.from(binary, (char) => char.charCodeAt(0));
+};
+
+const pcmToWavBlob = (pcmData: Uint8Array, sampleRate: number): Blob => {
+  const wavHeader = new ArrayBuffer(44);
+  const view = new DataView(wavHeader);
+  const channels = 1;
+  const bitsPerSample = 16;
+  const byteRate = sampleRate * channels * (bitsPerSample / 8);
+  const blockAlign = channels * (bitsPerSample / 8);
+
+  view.setUint32(0, 0x52494646, false);
+  view.setUint32(4, 36 + pcmData.length, true);
+  view.setUint32(8, 0x57415645, false);
+  view.setUint32(12, 0x666d7420, false);
+  view.setUint32(16, 16, true);
+  view.setUint16(20, 1, true);
+  view.setUint16(22, channels, true);
+  view.setUint32(24, sampleRate, true);
+  view.setUint32(28, byteRate, true);
+  view.setUint16(32, blockAlign, true);
+  view.setUint16(34, bitsPerSample, true);
+  view.setUint32(36, 0x64617461, false);
+  view.setUint32(40, pcmData.length, true);
+
+  return new Blob([wavHeader, pcmData], { type: 'audio/wav' });
+};
 
 const VoiceoverGenerator: React.FC = () => {
   const [text, setText] = useState('');
-  const [selectedVoice, setSelectedVoice] = useState<any>(VOICES[0]);
+  const [selectedVoice, setSelectedVoice] = useState<Voice>(VOICES[0]);
   const [isLoading, setIsLoading] = useState(false);
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
+  const [downloadExtension, setDownloadExtension] = useState<'wav' | 'mp3'>('wav');
   const audioRef = useRef<HTMLAudioElement>(null);
 
-  React.useEffect(() => {
+  useEffect(() => {
     const savedScript = localStorage.getItem('wyp_tts_script');
     if (savedScript) {
       setText(savedScript);
@@ -25,15 +58,30 @@ const VoiceoverGenerator: React.FC = () => {
     }
   }, []);
 
+  useEffect(() => () => {
+    if (audioUrl) {
+      URL.revokeObjectURL(audioUrl);
+    }
+  }, [audioUrl]);
+
   const handleGenerate = async () => {
     if (!text.trim() || isLoading) return;
 
     setIsLoading(true);
+    if (audioUrl) {
+      URL.revokeObjectURL(audioUrl);
+    }
     setAudioUrl(null);
     try {
-      const base64Data = await generateSpeech(text, selectedVoice.id);
-      const blob = await (await fetch(`data:audio/mpeg;base64,${base64Data}`)).blob();
+      const { audioData, mimeType } = await generateSpeech(text, selectedVoice.id);
+      const audioBytes = base64ToUint8Array(audioData);
+      const sampleRate = Number(mimeType.match(/rate=(\d+)/)?.[1] || 24000);
+      const isRawPcm = mimeType.startsWith('audio/L16');
+      const blob = isRawPcm
+        ? pcmToWavBlob(audioBytes, sampleRate)
+        : new Blob([audioBytes], { type: mimeType || 'audio/mpeg' });
       const url = URL.createObjectURL(blob);
+      setDownloadExtension(isRawPcm ? 'wav' : 'mp3');
       setAudioUrl(url);
     } catch (error: any) {
       console.error("TTS Error:", error);
@@ -48,7 +96,7 @@ const VoiceoverGenerator: React.FC = () => {
     if (!audioUrl) return;
     const a = document.createElement('a');
     a.href = audioUrl;
-    a.download = `voiceover_${Date.now()}.mp3`;
+    a.download = `voiceover_${Date.now()}.${downloadExtension}`;
     a.click();
   };
 
@@ -170,7 +218,7 @@ const VoiceoverGenerator: React.FC = () => {
                     onClick={downloadAudio}
                     className="bg-green-600 hover:bg-green-500 text-white py-3 rounded-xl font-bold transition-colors flex items-center justify-center gap-2"
                   >
-                    <span>📥</span> Download MP3
+                    <span>📥</span> Download Audio
                   </button>
                 </div>
 

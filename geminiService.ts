@@ -618,7 +618,10 @@ export const generateSeasonalCampaign = async (season: string): Promise<{ title:
   return JSON.parse(response.text || '{"title": "", "ideas": [], "promotion": ""}');
 };
 
-export const generateSpeech = async (text: string, voiceName: 'Puck' | 'Charon' | 'Kore' | 'Fenrir' | 'Zephyr' = 'Kore'): Promise<string> => {
+export const generateSpeech = async (
+  text: string,
+  voiceName: 'Puck' | 'Charon' | 'Kore' | 'Fenrir' | 'Zephyr' = 'Kore'
+): Promise<{ audioData: string; mimeType: string }> => {
   const response = await handleResponse(() => callGeminiProxy({
     model: 'gemini-2.5-flash-preview-tts',
     contents: [{ parts: [{ text: `TTS the following text clearly and professionally: ${text}` }] }],
@@ -631,11 +634,14 @@ export const generateSpeech = async (text: string, voiceName: 'Puck' | 'Charon' 
       },
     },
   }));
-  const base64Audio = response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
-  if (!base64Audio) {
+  const inlineData = response.candidates?.[0]?.content?.parts?.[0]?.inlineData;
+  if (!inlineData?.data) {
     throw new Error("Failed to generate audio data. Please check if the model is available in your region.");
   }
-  return base64Audio;
+  return {
+    audioData: inlineData.data,
+    mimeType: inlineData.mimeType || 'audio/L16;codec=pcm;rate=24000',
+  };
 };
 
 export const runMarketingAudit = async (data: string, imageBase64?: string): Promise<{

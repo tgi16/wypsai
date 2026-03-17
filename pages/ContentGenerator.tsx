@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { generateMarketingContent } from '../geminiService';
-import { MarketingContent } from '../types';
+import { MarketingContent, AppTab } from '../types';
 import Feedback from '../components/Feedback';
 import imageCompression from 'browser-image-compression';
 
@@ -12,7 +12,11 @@ interface ContentHistory {
   content: MarketingContent;
 }
 
-const ContentGenerator: React.FC = () => {
+interface ContentGeneratorProps {
+  onNavigate?: (tab: AppTab) => void;
+}
+
+const ContentGenerator: React.FC<ContentGeneratorProps> = ({ onNavigate }) => {
   const [description, setDescription] = useState('');
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<MarketingContent | null>(null);
@@ -163,6 +167,13 @@ const ContentGenerator: React.FC = () => {
     navigator.clipboard.writeText(text);
     setToastMsg(`${label} ကို ကူးယူပြီးပါပြီ!`);
     setTimeout(() => setToastMsg(''), 3000);
+  };
+
+  const goToVoiceover = (script: string) => {
+    localStorage.setItem('wyp_tts_script', script);
+    if (onNavigate) {
+      onNavigate(AppTab.VOICEOVER_GEN);
+    }
   };
 
   return (
@@ -373,7 +384,12 @@ const ContentGenerator: React.FC = () => {
                     <div className="bg-slate-950/40 p-5 rounded-2xl border border-slate-800/50">
                       <div className="flex justify-between items-center mb-4">
                         <span className="text-[10px] font-black text-pink-500 uppercase tracking-widest">1. Visual Script (ဘာရိုက်မလဲ)</span>
-                        <button onClick={() => copyToClipboard(result.tiktokVisualScript, "TikTok Script")} className="text-[10px] font-black text-slate-500 hover:text-white transition-colors">COPY SCRIPT</button>
+                        <div className="flex gap-4">
+                          <button onClick={() => goToVoiceover(result.tiktokVisualScript)} className="text-[10px] font-black text-amber-500 hover:text-amber-400 transition-colors flex items-center gap-1">
+                            <span>🎙️</span> GENERATE VOICEOVER
+                          </button>
+                          <button onClick={() => copyToClipboard(result.tiktokVisualScript, "TikTok Script")} className="text-[10px] font-black text-slate-500 hover:text-white transition-colors">COPY SCRIPT</button>
+                        </div>
                       </div>
                       <p className="text-xs text-slate-400 leading-relaxed italic">"{result.tiktokVisualScript}"</p>
                     </div>

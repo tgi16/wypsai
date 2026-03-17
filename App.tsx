@@ -19,6 +19,7 @@ const EngagementPosts = lazy(() => import('./pages/EngagementPosts'));
 const ClientGuides = lazy(() => import('./pages/ClientGuides'));
 const PremiumPromotions = lazy(() => import('./pages/PremiumPromotions'));
 const AutoReplyBuilder = lazy(() => import('./pages/AutoReplyBuilder'));
+const VoiceoverGenerator = lazy(() => import('./pages/VoiceoverGenerator'));
 const StrategyPartner = lazy(() => import('./pages/StrategyPartner'));
 const ContractGenerator = lazy(() => import('./pages/ContractGenerator'));
 const ConceptGenerator = lazy(() => import('./pages/ConceptGenerator'));
@@ -72,7 +73,7 @@ const App: React.FC = () => {
       case AppTab.DASHBOARD:
         return <Dashboard key="dashboard" onNavigate={setActiveTab} />;
       case AppTab.CONTENT_GEN:
-        return <ContentGenerator key="content-gen" />;
+        return <ContentGenerator key="content-gen" onNavigate={setActiveTab} />;
       case AppTab.SALES_SCRIPTS:
         return <SalesScriptManager key="sales-scripts" />;
       case AppTab.STRATEGY:
@@ -97,6 +98,8 @@ const App: React.FC = () => {
         return <PremiumPromotions key="premium-promotions" />;
       case AppTab.AUTO_REPLY:
         return <AutoReplyBuilder key="auto-reply" />;
+      case AppTab.VOICEOVER_GEN:
+        return <VoiceoverGenerator key="voiceover-gen" />;
       case AppTab.STRATEGY_PARTNER:
         return <StrategyPartner key="strategy-partner" />;
       case AppTab.CONTRACT_GEN:

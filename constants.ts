@@ -17,6 +17,7 @@ export const MENU_GROUPS = [
     title: 'Content Creation',
     items: [
       { id: AppTab.CONTENT_GEN, label: 'ပိုစ်တ် ရေးပေးရန်', icon: '✍️' },
+      { id: AppTab.VOICEOVER_GEN, label: 'Voiceover Generator', icon: '🎙️' },
       { id: AppTab.SEVEN_DAY_PLAN, label: '7-Day Plan', icon: '📅' },
       { id: AppTab.ENGAGEMENT_POSTS, label: 'Engagement Boost', icon: '🔥' },
       { id: AppTab.SEASONAL_CAMPAIGN, label: 'Seasonal Plan', icon: '🎉' },
@@ -49,6 +50,7 @@ export const MENU_GROUPS = [
 export const PRICING = {
   'gemini-3.1-pro-preview': { input: 3.5 / 1000000, output: 10.5 / 1000000 },
   'gemini-3-flash-preview': { input: 0.075 / 1000000, output: 0.3 / 1000000 },
+  'gemini-2.5-flash-preview-tts': { input: 0.1 / 1000000, output: 0.1 / 1000000 }, // Estimated
   'gemini-1.5-pro': { input: 3.5 / 1000000, output: 10.5 / 1000000 },
   'gemini-1.5-flash': { input: 0.075 / 1000000, output: 0.3 / 1000000 },
 };

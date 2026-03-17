@@ -33,7 +33,8 @@ async function startServer() {
       res.json({
         text: response.text,
         candidates: response.candidates,
-        usageMetadata: response.usageMetadata
+        usageMetadata: response.usageMetadata,
+        response: response // Include full response for binary data
       });
     } catch (error: any) {
       console.error("Server-side Gemini Error:", error);

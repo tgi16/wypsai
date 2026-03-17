@@ -618,6 +618,27 @@ export const generateSeasonalCampaign = async (season: string): Promise<{ title:
   return JSON.parse(response.text || '{"title": "", "ideas": [], "promotion": ""}');
 };
 
+export const generateSpeech = async (text: string, voiceName: 'Puck' | 'Charon' | 'Kore' | 'Fenrir' | 'Zephyr' = 'Kore'): Promise<string> => {
+  const response = await handleResponse(() => callGeminiProxy({
+    model: 'gemini-2.5-flash-preview-tts',
+    contents: [{ parts: [{ text: `TTS the following text clearly and professionally: ${text}` }] }],
+    config: {
+      responseModalities: ['AUDIO'],
+      speechConfig: {
+        voiceConfig: {
+          prebuiltVoiceConfig: { voiceName },
+        },
+      },
+    },
+  }));
+
+  const base64Audio = response.response?.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
+  if (!base64Audio) {
+    throw new Error("Failed to generate audio data");
+  }
+  return base64Audio;
+};
+
 export const createStrategyChat = (initialHistory: any[] = []) => {
   const history = [...initialHistory];
   

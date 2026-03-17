@@ -36,8 +36,13 @@ const ContentGenerator: React.FC<ContentGeneratorProps> = ({ onNavigate }) => {
   useEffect(() => {
     const savedToken = localStorage.getItem('fb_page_token');
     const savedPageId = localStorage.getItem('fb_page_id');
+    const pendingTopic = localStorage.getItem('wyp_content_topic');
     if (savedToken) setFbToken(savedToken);
     if (savedPageId) setFbPageId(savedPageId);
+    if (pendingTopic) {
+      setDescription(pendingTopic);
+      localStorage.removeItem('wyp_content_topic');
+    }
 
     const savedHistory = localStorage.getItem('wyp_content_history');
     if (savedHistory) {

@@ -113,7 +113,7 @@ const App: React.FC = () => {
         return <CompetitorAnalysis key="competitor-analysis" />;
       case AppTab.MARKETING_AUDIT:
         return <MarketingAudit key="marketing-audit" onNavigateToContent={(topic) => {
-          // Pass topic to content generator via some state or just navigate
+          localStorage.setItem('wyp_content_topic', topic);
           setActiveTab(AppTab.CONTENT_GEN);
         }} />;
       default:

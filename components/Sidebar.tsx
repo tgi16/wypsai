@@ -116,13 +116,13 @@ const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab }) => {
         </div>
 
         <a 
-          href="https://www.facebook.com/wypstudio" 
+          href="https://wypstudio-pos.web.app/" 
           target="_blank" 
           rel="noopener noreferrer"
-          className="flex items-center gap-3 p-4 bg-blue-600/5 hover:bg-blue-600/10 text-blue-400 rounded-2xl transition-all border border-blue-500/10 group"
+          className="flex items-center gap-3 p-4 bg-amber-600/5 hover:bg-amber-600/10 text-amber-500 rounded-2xl transition-all border border-amber-500/10 group"
         >
-          <span className="text-xl group-hover:rotate-12 transition-transform">🔵</span>
-          <span className="text-xs font-black uppercase tracking-[0.2em]">Facebook</span>
+          <span className="text-xl group-hover:rotate-12 transition-transform">🏪</span>
+          <span className="text-xs font-black uppercase tracking-[0.2em]">POS System</span>
         </a>
       </div>
     </aside>

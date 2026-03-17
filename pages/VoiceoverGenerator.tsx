@@ -35,9 +35,10 @@ const VoiceoverGenerator: React.FC = () => {
       const blob = await (await fetch(`data:audio/mpeg;base64,${base64Data}`)).blob();
       const url = URL.createObjectURL(blob);
       setAudioUrl(url);
-    } catch (error) {
+    } catch (error: any) {
       console.error("TTS Error:", error);
-      alert("အသံဖိုင် ထုတ်ယူရာတွင် အခက်အခဲရှိနေပါသည်။ ခဏနေမှ ပြန်လည်ကြိုးစားပေးပါ။");
+      const errorMsg = error.message || "အသံဖိုင် ထုတ်ယူရာတွင် အခက်အခဲရှိနေပါသည်။";
+      alert(errorMsg);
     } finally {
       setIsLoading(false);
     }

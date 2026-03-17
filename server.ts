@@ -30,11 +30,25 @@ async function startServer() {
         config
       });
 
+      // Manually extract candidates to ensure binary data (inlineData) is properly serialized
+      const serializedCandidates = response.candidates?.map(c => ({
+        content: {
+          parts: c.content.parts.map(p => ({
+            text: p.text,
+            inlineData: p.inlineData ? {
+              data: p.inlineData.data,
+              mimeType: p.inlineData.mimeType
+            } : undefined
+          }))
+        },
+        finishReason: c.finishReason,
+        index: c.index
+      }));
+
       res.json({
         text: response.text,
-        candidates: response.candidates,
-        usageMetadata: response.usageMetadata,
-        response: response // Include full response for binary data
+        candidates: serializedCandidates,
+        usageMetadata: response.usageMetadata
       });
     } catch (error: any) {
       console.error("Server-side Gemini Error:", error);

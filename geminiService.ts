@@ -103,14 +103,7 @@ export const callGeminiProxy = async (params: { model: string, contents: any, co
     body: JSON.stringify(params),
   });
 
-  const raw = await response.text();
-  let data: any;
-
-  try {
-    data = JSON.parse(raw);
-  } catch {
-    throw new Error(`Gemini proxy returned non-JSON response (${response.status}).`);
-  }
+  const data = await response.json();
   
   if (!response.ok) {
     throw new Error(data.error || "Failed to call Gemini API");
@@ -638,10 +631,9 @@ export const generateSpeech = async (text: string, voiceName: 'Puck' | 'Charon' 
       },
     },
   }));
-
-  const base64Audio = response.response?.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
+  const base64Audio = response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
   if (!base64Audio) {
-    throw new Error("Failed to generate audio data");
+    throw new Error("Failed to generate audio data. Please check if the model is available in your region.");
   }
   return base64Audio;
 };

@@ -1,5 +1,5 @@
 import React, { useState, useRef } from 'react';
-import { motion } from 'motion/react';
+import { motion } from 'framer-motion';
 import { BarChart3, TrendingUp, AlertCircle, CheckCircle2, ArrowRight, ClipboardList, Sparkles, Image as ImageIcon, X, Upload } from 'lucide-react';
 import { runMarketingAudit } from '../geminiService';
 import imageCompression from 'browser-image-compression';

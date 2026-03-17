@@ -5,5 +5,15 @@
     "api/*.js": {
       "maxDuration": 60
     }
-  }
+  },
+  "rewrites": [
+    {
+      "source": "/__/auth/(.*)",
+      "destination": "https://gen-lang-client-0977125339.firebaseapp.com/__/auth/$1"
+    },
+    {
+      "source": "/__/firebase/init.json",
+      "destination": "https://gen-lang-client-0977125339.firebaseapp.com/__/firebase/init.json"
+    }
+  ]
 }

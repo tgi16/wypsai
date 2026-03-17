@@ -1,5 +1,34 @@
 
 import { MarketingContent, MarketTrend, DailyPlan, SalesScript, DailyContent, EngagementPost, ClientGuide, PremiumPromotion, AutoReply } from "./types";
+import { PRICING, UsageMetadata } from "./constants";
+
+/**
+ * Track and store Gemini API usage cost in localStorage
+ */
+const trackUsage = (model: string, usage: UsageMetadata) => {
+  try {
+    const pricing = (PRICING as any)[model] || PRICING['gemini-3-flash-preview'];
+    const cost = (usage.promptTokenCount * pricing.input) + (usage.candidatesTokenCount * pricing.output);
+    
+    const today = new Date().toISOString().split('T')[0];
+    const savedUsage = JSON.parse(localStorage.getItem('gemini_usage_v2') || '{}');
+    
+    if (!savedUsage[today]) {
+      savedUsage[today] = { totalCost: 0, count: 0 };
+    }
+    
+    savedUsage[today].totalCost += cost;
+    savedUsage[today].count += 1;
+    savedUsage[today].lastCost = cost;
+    
+    localStorage.setItem('gemini_usage_v2', JSON.stringify(savedUsage));
+    
+    // Dispatch custom event to notify UI
+    window.dispatchEvent(new CustomEvent('gemini_usage_updated', { detail: savedUsage[today] }));
+  } catch (e) {
+    console.error("Failed to track usage:", e);
+  }
+};
 
 enum Type {
   TYPE_UNSPECIFIED = "TYPE_UNSPECIFIED",
@@ -78,6 +107,11 @@ export const callGeminiProxy = async (params: { model: string, contents: any, co
   
   if (!response.ok) {
     throw new Error(data.error || "Failed to call Gemini API");
+  }
+
+  // Track usage if metadata is available
+  if (data.usageMetadata) {
+    trackUsage(params.model, data.usageMetadata);
   }
 
   return data;

@@ -41,8 +41,20 @@ export const MENU_GROUPS = [
       { id: AppTab.COMPETITOR_ANALYSIS, label: 'Competitor Analysis', icon: '🔭' },
       { id: AppTab.CONCEPT_GEN, label: 'Moodboard & Concept', icon: '✨' },
       { id: AppTab.PRICING, label: 'စျေးနှုန်း သတ်မှတ်ချက်', icon: '💰' },
-      { id: AppTab.HASHTAGS, label: 'Hashtag Strategy', icon: '#️⃣' },
       { id: AppTab.PORTFOLIO_BIO, label: 'Portfolio Bio', icon: '👤' },
     ]
   }
 ];
+
+export const PRICING = {
+  'gemini-3.1-pro-preview': { input: 3.5 / 1000000, output: 10.5 / 1000000 },
+  'gemini-3-flash-preview': { input: 0.075 / 1000000, output: 0.3 / 1000000 },
+  'gemini-1.5-pro': { input: 3.5 / 1000000, output: 10.5 / 1000000 },
+  'gemini-1.5-flash': { input: 0.075 / 1000000, output: 0.3 / 1000000 },
+};
+
+export interface UsageMetadata {
+  promptTokenCount: number;
+  candidatesTokenCount: number;
+  totalTokenCount: number;
+}

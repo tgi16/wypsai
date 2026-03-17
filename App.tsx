@@ -35,7 +35,28 @@ const PageLoader = () => (
 const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState<AppTab>(AppTab.DASHBOARD);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [usage, setUsage] = useState({ totalCost: 0, count: 0, lastCost: 0 });
   const mainRef = useRef<HTMLDivElement>(null);
+
+  const loadUsage = () => {
+    const today = new Date().toISOString().split('T')[0];
+    const savedUsage = JSON.parse(localStorage.getItem('gemini_usage_v2') || '{}');
+    if (savedUsage[today]) {
+      setUsage(savedUsage[today]);
+    }
+  };
+
+  useEffect(() => {
+    loadUsage();
+    const handleUpdate = (event: any) => {
+      setUsage(event.detail);
+    };
+    window.addEventListener('gemini_usage_updated', handleUpdate);
+    return () => window.removeEventListener('gemini_usage_updated', handleUpdate);
+  }, []);
+
+  const budget = 5.0;
+  const percentage = Math.min((usage.totalCost / budget) * 100, 100);
 
   // Reset scroll to top when tab changes to prevent layout ghosting
   useEffect(() => {
@@ -152,9 +173,28 @@ const App: React.FC = () => {
                    </div>
                 </div>
              ))}
+
+             {/* Mobile Usage Tracker */}
+             <div className="col-span-2 mt-4 p-6 bg-slate-900/50 rounded-[2rem] border border-slate-800/50">
+                <div className="flex justify-between items-center mb-3">
+                  <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">API Usage (Today)</span>
+                  <span className="text-xs font-black text-amber-500">${usage.totalCost.toFixed(3)} / $5</span>
+                </div>
+                <div className="h-2 bg-slate-950 rounded-full overflow-hidden mb-3">
+                  <div 
+                    className={`h-full transition-all duration-1000 ${percentage > 80 ? 'bg-red-500' : percentage > 50 ? 'bg-amber-500' : 'bg-emerald-500'}`}
+                    style={{ width: `${percentage}%` }}
+                  />
+                </div>
+                <div className="flex justify-between text-[10px] font-bold text-slate-400">
+                  <span>{usage.count} calls made</span>
+                  <span className="text-slate-600">Limit: $5.00</span>
+                </div>
+             </div>
           </div>
         </div>
       )}
+
     </div>
   );
 };

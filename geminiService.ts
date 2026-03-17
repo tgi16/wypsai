@@ -103,7 +103,14 @@ export const callGeminiProxy = async (params: { model: string, contents: any, co
     body: JSON.stringify(params),
   });
 
-  const data = await response.json();
+  const raw = await response.text();
+  let data: any;
+
+  try {
+    data = JSON.parse(raw);
+  } catch {
+    throw new Error(`Gemini proxy returned non-JSON response (${response.status}).`);
+  }
   
   if (!response.ok) {
     throw new Error(data.error || "Failed to call Gemini API");

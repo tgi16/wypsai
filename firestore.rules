@@ -1,0 +1,77 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // ===============================================================
+    // Assumed Data Model
+    // ===============================================================
+    //
+    // Collection: saved_library
+    // Fields:
+    //   - title: string (1-200 chars)
+    //   - type: string (1-50 chars)
+    //   - content: string (1-10000 chars)
+    //   - uid: string (matches auth.uid)
+    //   - createdAt: timestamp
+    //
+    // Collection: chats/{chatId}/messages
+    // Fields:
+    //   - role: string (user or model)
+    //   - text: string (1-5000 chars)
+    //   - uid: string (matches auth.uid)
+    //   - timestamp: timestamp
+    //
+    // ===============================================================
+
+    // Helper Functions
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(uid) {
+      return isAuthenticated() && request.auth.uid == uid;
+    }
+
+    function isAdmin() {
+      return isAuthenticated() && 
+        (request.auth.token.email == "kingofstar7@gmail.com" && request.auth.token.email_verified == true);
+    }
+
+    function isValidSavedItem(data) {
+      return data.keys().hasOnly(['title', 'type', 'content', 'uid', 'createdAt']) &&
+             data.title is string && data.title.size() >= 1 && data.title.size() <= 200 &&
+             data.type is string && data.type.size() >= 1 && data.type.size() <= 50 &&
+             data.content is string && data.content.size() >= 1 && data.content.size() <= 10000 &&
+             data.uid == request.auth.uid &&
+             data.createdAt is timestamp;
+    }
+
+    function isValidMessage(data) {
+      return data.keys().hasOnly(['role', 'text', 'uid', 'timestamp']) &&
+             data.role in ['user', 'model'] &&
+             data.text is string && data.text.size() >= 1 && data.text.size() <= 5000 &&
+             data.uid == request.auth.uid &&
+             data.timestamp is timestamp;
+    }
+
+    // Rules
+    match /saved_library/{itemId} {
+      allow read: if isAuthenticated() && (resource == null || resource.data.uid == request.auth.uid || isAdmin());
+      allow create: if isAuthenticated() && isValidSavedItem(request.resource.data);
+      allow update: if isAuthenticated() && isOwner(resource.data.uid) && isValidSavedItem(request.resource.data);
+      allow delete: if isAuthenticated() && (isOwner(resource.data.uid) || isAdmin());
+    }
+
+    match /chats/{chatId} {
+      allow read, write: if isAuthenticated() && (chatId.startsWith(request.auth.uid) || isAdmin());
+      
+      match /messages/{messageId} {
+        allow read: if isAuthenticated() && (chatId.startsWith(request.auth.uid) || isAdmin());
+        allow create: if isAuthenticated() && (chatId.startsWith(request.auth.uid) || isAdmin()) && isValidMessage(request.resource.data);
+      }
+    }
+
+    match /users/{userId} {
+      allow read, write: if isOwner(userId) || isAdmin();
+    }
+  }
+}

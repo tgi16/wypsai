@@ -2,6 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { AppTab } from '../types';
 import { MENU_GROUPS } from '../constants';
+import { useFirebase } from './FirebaseContext';
 
 interface SidebarProps {
   activeTab: AppTab;
@@ -15,6 +16,7 @@ interface UsageData {
 }
 
 const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab }) => {
+  const { user, login, logout } = useFirebase();
   const [usage, setUsage] = useState<UsageData>({ totalCost: 0, count: 0 });
 
   const loadUsage = () => {
@@ -75,6 +77,26 @@ const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab }) => {
       </nav>
       
       <div className="p-6 border-t border-slate-900/50 shrink-0 space-y-4">
+        {/* Auth Section */}
+        {!user ? (
+          <button 
+            onClick={() => login()}
+            className="w-full flex items-center justify-center gap-3 p-4 bg-amber-500/10 hover:bg-amber-500/20 text-amber-500 rounded-2xl transition-all border border-amber-500/20 font-bold text-sm"
+          >
+            <span>🔑</span> Google ဖြင့် Login ဝင်ရန်
+          </button>
+        ) : (
+          <div className="space-y-3">
+            <div className="flex items-center gap-3 px-2">
+              <img src={user.photoURL || ''} alt="User" className="w-8 h-8 rounded-full border border-amber-500/30" />
+              <div className="flex-1 min-w-0">
+                <p className="text-xs font-bold text-white truncate">{user.displayName}</p>
+                <button onClick={() => logout()} className="text-[10px] text-slate-500 hover:text-amber-500 transition-colors">Logout</button>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Usage Tracker in Sidebar */}
         <div className="bg-slate-900/50 rounded-2xl p-4 border border-slate-800/50">
           <div className="flex justify-between items-center mb-2">

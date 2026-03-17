@@ -3,6 +3,7 @@ import React, { useState, useEffect, useRef, Suspense, lazy } from 'react';
 import { AppTab } from './types';
 import { MENU_GROUPS } from './constants';
 import Sidebar from './components/Sidebar';
+import { FirebaseProvider } from './components/FirebaseContext';
 
 // Lazy load page components
 const Dashboard = lazy(() => import('./pages/Dashboard'));
@@ -211,4 +212,10 @@ const MobileNavItem = ({ id, icon, label, active, onClick }: any) => (
   </button>
 );
 
-export default App;
+const AppWrapper: React.FC = () => (
+  <FirebaseProvider>
+    <App />
+  </FirebaseProvider>
+);
+
+export default AppWrapper;

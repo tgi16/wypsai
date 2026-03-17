@@ -3,6 +3,7 @@ import { createStrategyChat } from '../geminiService';
 import ReactMarkdown from 'react-markdown';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { db } from '../firebase';
+import { useFirebase } from '../components/FirebaseContext';
 
 interface Message {
   id: string;
@@ -24,6 +25,7 @@ const QUICK_ACTIONS = [
 ];
 
 const StrategyPartner: React.FC = () => {
+  const { user, login } = useFirebase();
   const [messages, setMessages] = useState<Message[]>([defaultGreeting]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -33,8 +35,16 @@ const StrategyPartner: React.FC = () => {
 
   useEffect(() => {
     const loadHistory = async () => {
+      if (!user) {
+        setMessages([defaultGreeting]);
+        const session = createStrategyChat([{ role: 'model', parts: [{ text: defaultGreeting.content }] }]);
+        setChatSession(session);
+        setIsInitializing(false);
+        return;
+      }
+
       try {
-        const docRef = doc(db, 'app_data', 'strategy_chat');
+        const docRef = doc(db, 'chats', `${user.uid}_strategy`);
         const docSnap = await getDoc(docRef);
         
         let loadedMessages = [defaultGreeting];
@@ -64,7 +74,7 @@ const StrategyPartner: React.FC = () => {
     };
 
     loadHistory();
-  }, []);
+  }, [user]);
 
   const clearHistory = async () => {
     if (window.confirm('ဆွေးနွေးထားသမျှကို ဖျက်ပစ်မှာ သေချာပါသလား?')) {
@@ -73,10 +83,12 @@ const StrategyPartner: React.FC = () => {
       const session = createStrategyChat([{ role: 'model', parts: [{ text: defaultGreeting.content }] }]);
       setChatSession(session);
       
-      try {
-        await setDoc(doc(db, 'app_data', 'strategy_chat'), { messages: resetMessages });
-      } catch (error) {
-        console.error("Error clearing history in Firebase:", error);
+      if (user) {
+        try {
+          await setDoc(doc(db, 'chats', `${user.uid}_strategy`), { messages: resetMessages });
+        } catch (error) {
+          console.error("Error clearing history in Firebase:", error);
+        }
       }
     }
   };
@@ -113,10 +125,12 @@ const StrategyPartner: React.FC = () => {
     setIsLoading(true);
 
     // Save user message to Firebase
-    try {
-      await setDoc(doc(db, 'app_data', 'strategy_chat'), { messages: updatedMessages });
-    } catch (error) {
-      console.error("Error saving to Firebase:", error);
+    if (user) {
+      try {
+        await setDoc(doc(db, 'chats', `${user.uid}_strategy`), { messages: updatedMessages });
+      } catch (error) {
+        console.error("Error saving to Firebase:", error);
+      }
     }
 
     try {
@@ -134,10 +148,12 @@ const StrategyPartner: React.FC = () => {
       setMessages(finalMessages);
       
       // Save model message to Firebase
-      try {
-        await setDoc(doc(db, 'app_data', 'strategy_chat'), { messages: finalMessages });
-      } catch (error) {
-        console.error("Error saving to Firebase:", error);
+      if (user) {
+        try {
+          await setDoc(doc(db, 'chats', `${user.uid}_strategy`), { messages: finalMessages });
+        } catch (error) {
+          console.error("Error saving to Firebase:", error);
+        }
       }
       
     } catch (error) {
@@ -180,6 +196,12 @@ const StrategyPartner: React.FC = () => {
 
       {/* Chat Messages */}
       <div className="flex-1 overflow-y-auto p-4 md:p-6 space-y-6 custom-scrollbar burmese-text">
+        {!user && messages.length > 1 && (
+          <div className="bg-amber-500/10 border border-amber-500/20 rounded-2xl p-4 mb-6 text-center space-y-3">
+            <p className="text-xs font-bold text-amber-500">ဆွေးနွေးချက်များကို Mac နှင့် ဖုန်းတို့တွင် သိမ်းဆည်းထားနိုင်ရန် Login ဝင်ပေးပါ</p>
+            <button onClick={() => login()} className="bg-amber-500 text-slate-950 px-4 py-1.5 rounded-lg text-xs font-black">Login with Google</button>
+          </div>
+        )}
         {messages.map((msg) => (
           <div 
             key={msg.id} 

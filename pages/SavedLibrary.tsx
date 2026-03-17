@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { collection, query, orderBy, onSnapshot, deleteDoc, doc } from 'firebase/firestore';
+import { collection, query, orderBy, onSnapshot, deleteDoc, doc, where } from 'firebase/firestore';
 import { db } from '../firebase';
+import { useFirebase } from '../components/FirebaseContext';
 import ReactMarkdown from 'react-markdown';
 
 interface SavedContent {
@@ -9,15 +10,28 @@ interface SavedContent {
   type: string;
   content: string;
   createdAt: any;
+  uid: string;
 }
 
 const SavedLibrary: React.FC = () => {
+  const { user, login } = useFirebase();
   const [savedItems, setSavedItems] = useState<SavedContent[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedItem, setSelectedItem] = useState<SavedContent | null>(null);
 
   useEffect(() => {
-    const q = query(collection(db, 'saved_library'), orderBy('createdAt', 'desc'));
+    if (!user) {
+      setSavedItems([]);
+      setLoading(false);
+      return;
+    }
+
+    const q = query(
+      collection(db, 'saved_library'), 
+      where('uid', '==', user.uid),
+      orderBy('createdAt', 'desc')
+    );
+    
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const items: SavedContent[] = [];
       snapshot.forEach((doc) => {
@@ -31,7 +45,7 @@ const SavedLibrary: React.FC = () => {
     });
 
     return () => unsubscribe();
-  }, []);
+  }, [user]);
 
   const handleDelete = async (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
@@ -79,6 +93,16 @@ const SavedLibrary: React.FC = () => {
         {loading ? (
           <div className="flex justify-center py-12">
             <div className="w-8 h-8 border-4 border-amber-500 border-t-transparent rounded-full animate-spin" />
+          </div>
+        ) : !user ? (
+          <div className="text-center py-12 bg-slate-950/50 rounded-2xl border border-slate-800/50 space-y-4">
+            <p className="text-slate-400">မှတ်တမ်းများကို Mac နှင့် ဖုန်းတို့တွင် အတူတူကြည့်နိုင်ရန် Login ဝင်ပေးပါ</p>
+            <button 
+              onClick={() => login()}
+              className="bg-amber-500 hover:bg-amber-400 text-slate-950 px-8 py-3 rounded-xl font-bold transition-colors"
+            >
+              Google ဖြင့် Login ဝင်ရန်
+            </button>
           </div>
         ) : savedItems.length === 0 ? (
           <div className="text-center py-12 bg-slate-950/50 rounded-2xl border border-slate-800/50">

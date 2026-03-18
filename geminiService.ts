@@ -622,11 +622,61 @@ export const generateSpeech = async (
   text: string,
   voiceName: 'Puck' | 'Charon' | 'Kore' | 'Fenrir' | 'Zephyr' = 'Kore'
 ): Promise<{ audioData: string; mimeType: string }> => {
+  const voiceDirectives = {
+    Kore: 'Warm, gentle, and human. Speak like a polished Myanmar female reel narrator with soft emotional lift and short natural pauses.',
+    Zephyr: 'Confident, smooth, and human. Speak like a calm Myanmar male narrator with relaxed pacing and clean sentence endings.',
+    Puck: 'Bright, lively, and expressive. Speak like an upbeat Myanmar social media host without sounding cartoonish.',
+    Charon: 'Steady, informative, and reassuring. Speak like a composed Myanmar presenter with natural pauses and grounded tone.',
+    Fenrir: 'Deep, cinematic, and rich. Speak like a premium Myanmar trailer narrator with slow, confident delivery.',
+  } as const;
+
+  const rewriteResponse = await handleResponse(() => callGeminiProxy({
+    model: 'gemini-3-flash-preview',
+    contents: [{
+      parts: [{
+        text: `Rewrite this script so it sounds natural when spoken aloud in a Myanmar reel voiceover.
+
+Rules:
+- Keep the original language unchanged.
+- Make it sound like a real person speaking, not reading.
+- Use short sentences and natural pauses.
+- Remove stiff, repetitive, robotic phrasing.
+- Keep the meaning and key selling points.
+- Output JSON only.
+
+Script:
+${text}`
+      }]
+    }],
+    config: {
+      responseMimeType: 'application/json',
+      responseSchema: {
+        type: Type.OBJECT,
+        properties: {
+          spokenScript: { type: Type.STRING },
+        },
+        required: ['spokenScript'],
+      },
+    },
+  }));
+
+  const spokenScript = JSON.parse(rewriteResponse.text || '{"spokenScript": ""}').spokenScript?.trim() || text.trim();
+
   const response = await handleResponse(() => callGeminiProxy({
     model: 'gemini-2.5-flash-preview-tts',
     contents: [{
       parts: [{
-        text: `Read this script naturally, clearly, and professionally. Keep the original language unchanged.\n\nTranscript:\n${text}`
+        text: `${voiceDirectives[voiceName]}
+
+Director notes:
+- Sound human, warm, and expressive.
+- Avoid robotic pacing.
+- Add tiny pauses where punctuation suggests a breath.
+- Keep pronunciation natural and smooth.
+- Do not change the words.
+
+Transcript:
+${spokenScript}`
       }]
     }],
     config: {

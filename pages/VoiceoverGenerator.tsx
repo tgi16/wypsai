@@ -60,10 +60,10 @@ const VoiceoverGenerator: React.FC = () => {
     setIsLoading(true);
     setAudioUrl(null);
     try {
-      const { data, mimeType } = await generateSpeech(text, selectedVoice.id);
+      const { audioData, mimeType } = await generateSpeech(text, selectedVoice.id);
       
       // Clean the base64 string (remove whitespace/newlines)
-      const cleanedData = data.replace(/\s/g, '');
+      const cleanedData = audioData.replace(/\s/g, '');
       
       // Convert base64 to Uint8Array safely
       const byteCharacters = atob(cleanedData);

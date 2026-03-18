@@ -35,6 +35,12 @@ const PageLoader = () => (
   </div>
 );
 
+const normalizeUsage = (raw: any) => ({
+  totalCost: Number(raw?.totalCost) || 0,
+  count: Number(raw?.count) || 0,
+  lastCost: Number(raw?.lastCost) || 0,
+});
+
 const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState<AppTab>(AppTab.DASHBOARD);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
@@ -45,14 +51,14 @@ const App: React.FC = () => {
     const today = new Date().toISOString().split('T')[0];
     const savedUsage = JSON.parse(localStorage.getItem('gemini_usage_v2') || '{}');
     if (savedUsage[today]) {
-      setUsage(savedUsage[today]);
+      setUsage(normalizeUsage(savedUsage[today]));
     }
   };
 
   useEffect(() => {
     loadUsage();
     const handleUpdate = (event: any) => {
-      setUsage(event.detail);
+      setUsage(normalizeUsage(event.detail));
     };
     window.addEventListener('gemini_usage_updated', handleUpdate);
     return () => window.removeEventListener('gemini_usage_updated', handleUpdate);

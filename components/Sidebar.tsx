@@ -15,6 +15,12 @@ interface UsageData {
   lastCost?: number;
 }
 
+const normalizeUsage = (raw: any): UsageData => ({
+  totalCost: Number(raw?.totalCost) || 0,
+  count: Number(raw?.count) || 0,
+  lastCost: Number(raw?.lastCost) || 0,
+});
+
 const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab }) => {
   const { user, login, logout } = useFirebase();
   const [usage, setUsage] = useState<UsageData>({ totalCost: 0, count: 0 });
@@ -23,14 +29,14 @@ const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab }) => {
     const today = new Date().toISOString().split('T')[0];
     const savedUsage = JSON.parse(localStorage.getItem('gemini_usage_v2') || '{}');
     if (savedUsage[today]) {
-      setUsage(savedUsage[today]);
+      setUsage(normalizeUsage(savedUsage[today]));
     }
   };
 
   useEffect(() => {
     loadUsage();
     const handleUpdate = (event: any) => {
-      setUsage(event.detail);
+      setUsage(normalizeUsage(event.detail));
     };
     window.addEventListener('gemini_usage_updated', handleUpdate);
     return () => window.removeEventListener('gemini_usage_updated', handleUpdate);

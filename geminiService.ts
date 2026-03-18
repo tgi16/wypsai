@@ -624,7 +624,11 @@ export const generateSpeech = async (
 ): Promise<{ audioData: string; mimeType: string }> => {
   const response = await handleResponse(() => callGeminiProxy({
     model: 'gemini-2.5-flash-preview-tts',
-    contents: [{ parts: [{ text: `TTS the following text clearly and professionally: ${text}` }] }],
+    contents: [{
+      parts: [{
+        text: `Read this script naturally, clearly, and professionally. Keep the original language unchanged.\n\nTranscript:\n${text}`
+      }]
+    }],
     config: {
       responseModalities: ['AUDIO'],
       speechConfig: {
@@ -634,9 +638,18 @@ export const generateSpeech = async (
       },
     },
   }));
-  const inlineData = response.candidates?.[0]?.content?.parts?.[0]?.inlineData;
+
+  const inlineData = response.candidates
+    ?.flatMap((candidate: any) => candidate?.content?.parts || [])
+    .find((part: any) => part?.inlineData?.data)
+    ?.inlineData;
+
   if (!inlineData?.data) {
-    throw new Error("Failed to generate audio data. Please check if the model is available in your region.");
+    const finishReason = response.candidates?.[0]?.finishReason;
+    if (finishReason === 'OTHER') {
+      throw new Error("ဒီစာသားကို အသံဖိုင်အဖြစ် မထုတ်ပေးနိုင်သေးပါ။ စာသားကို အနည်းငယ်တိုအောင် သို့မဟုတ် အင်္ဂလိပ်ညွှန်ကြားချက်မထည့်ဘဲ ပြန်စမ်းပေးပါ။");
+    }
+    throw new Error("အသံဖိုင် data မရရှိပါ။ ခဏနေလောက်ပြီး ပြန်စမ်းပေးပါ။");
   }
   return {
     audioData: inlineData.data,

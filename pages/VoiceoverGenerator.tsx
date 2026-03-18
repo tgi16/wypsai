@@ -62,13 +62,16 @@ const VoiceoverGenerator: React.FC = () => {
     try {
       const { data, mimeType } = await generateSpeech(text, selectedVoice.id);
       
-      // Convert base64 to Blob
-      const byteCharacters = atob(data);
-      const byteNumbers = new Array(byteCharacters.length);
+      // Clean the base64 string (remove whitespace/newlines)
+      const cleanedData = data.replace(/\s/g, '');
+      
+      // Convert base64 to Uint8Array safely
+      const byteCharacters = atob(cleanedData);
+      const byteArray = new Uint8Array(byteCharacters.length);
       for (let i = 0; i < byteCharacters.length; i++) {
-        byteNumbers[i] = byteCharacters.charCodeAt(i);
+        byteArray[i] = byteCharacters.charCodeAt(i);
       }
-      const byteArray = new Uint8Array(byteNumbers);
+      
       let audioBlob = new Blob([byteArray], { type: mimeType });
 
       // If it's PCM, we need to wrap it in a WAV header for the browser to play it

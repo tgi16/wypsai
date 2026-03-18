@@ -1,56 +1,52 @@
 
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { generateSpeech } from '../geminiService';
 
 const VOICES = [
-  { id: 'Kore', name: 'Kore (နူးညံ့သော အမျိုးသမီးသံ)', gender: 'Female' },
-  { id: 'Zephyr', name: 'Zephyr (အသံဩဇာရှိသော အမျိုးသားသံ)', gender: 'Male' },
-  { id: 'Puck', name: 'Puck (တက်ကြွသော အသံ)', gender: 'Neutral' },
-  { id: 'Charon', name: 'Charon (တည်ငြိမ်သော အသံ)', gender: 'Male' },
-  { id: 'Fenrir', name: 'Fenrir (နက်ရှိုင်းသော အသံ)', gender: 'Male' },
-] as const;
+  { id: 'Kore', name: 'Kore (နူးညံ့သော လူသားဆန်သည့် အမျိုးသမီးသံ)', gender: 'Female' },
+  { id: 'Zephyr', name: 'Zephyr (အသံဩဇာရှိသော လူသားဆန်သည့် အမျိုးသားသံ)', gender: 'Male' },
+  { id: 'Puck', name: 'Puck (တက်ကြွသော လူသားဆန်သည့် အသံ)', gender: 'Neutral' },
+  { id: 'Charon', name: 'Charon (တည်ငြိမ်သော လူသားဆန်သည့် အသံ)', gender: 'Male' },
+  { id: 'Fenrir', name: 'Fenrir (နက်ရှိုင်းသော လူသားဆန်သည့် အသံ)', gender: 'Male' },
+];
 
-type Voice = typeof VOICES[number];
-
-const base64ToUint8Array = (base64: string): Uint8Array => {
-  const binary = atob(base64);
-  return Uint8Array.from(binary, (char) => char.charCodeAt(0));
-};
-
-const pcmToWavBlob = (pcmData: Uint8Array, sampleRate: number): Blob => {
-  const wavHeader = new ArrayBuffer(44);
-  const view = new DataView(wavHeader);
-  const channels = 1;
-  const bitsPerSample = 16;
-  const byteRate = sampleRate * channels * (bitsPerSample / 8);
-  const blockAlign = channels * (bitsPerSample / 8);
-
-  view.setUint32(0, 0x52494646, false);
-  view.setUint32(4, 36 + pcmData.length, true);
-  view.setUint32(8, 0x57415645, false);
-  view.setUint32(12, 0x666d7420, false);
-  view.setUint32(16, 16, true);
-  view.setUint16(20, 1, true);
-  view.setUint16(22, channels, true);
-  view.setUint32(24, sampleRate, true);
-  view.setUint32(28, byteRate, true);
-  view.setUint16(32, blockAlign, true);
-  view.setUint16(34, bitsPerSample, true);
-  view.setUint32(36, 0x64617461, false);
-  view.setUint32(40, pcmData.length, true);
-
-  return new Blob([wavHeader, pcmData], { type: 'audio/wav' });
+const pcmToWav = (pcmBlob: Blob, sampleRate = 24000): Promise<Blob> => {
+  return new Promise((resolve) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const buffer = e.target?.result as ArrayBuffer;
+      const wavHeader = new ArrayBuffer(44);
+      const view = new DataView(wavHeader);
+      
+      view.setUint32(0, 0x52494646, false); // "RIFF"
+      view.setUint32(4, 36 + buffer.byteLength, true);
+      view.setUint32(8, 0x57415645, false); // "WAVE"
+      view.setUint32(12, 0x666d7420, false); // "fmt "
+      view.setUint32(16, 16, true);
+      view.setUint16(20, 1, true); // PCM
+      view.setUint16(22, 1, true); // Mono
+      view.setUint32(24, sampleRate, true);
+      view.setUint32(28, sampleRate * 2, true);
+      view.setUint16(32, 2, true);
+      view.setUint16(34, 16, true);
+      view.setUint32(36, 0x64617461, false); // "data"
+      view.setUint32(40, buffer.byteLength, true);
+      
+      resolve(new Blob([wavHeader, buffer], { type: 'audio/wav' }));
+    };
+    reader.readAsArrayBuffer(pcmBlob);
+  });
 };
 
 const VoiceoverGenerator: React.FC = () => {
   const [text, setText] = useState('');
-  const [selectedVoice, setSelectedVoice] = useState<Voice>(VOICES[0]);
+  const [selectedVoice, setSelectedVoice] = useState<any>(VOICES[0]);
   const [isLoading, setIsLoading] = useState(false);
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
-  const [downloadExtension, setDownloadExtension] = useState<'wav' | 'mp3'>('wav');
+  const [audioMimeType, setAudioMimeType] = useState<string>('audio/mpeg');
   const audioRef = useRef<HTMLAudioElement>(null);
 
-  useEffect(() => {
+  React.useEffect(() => {
     const savedScript = localStorage.getItem('wyp_tts_script');
     if (savedScript) {
       setText(savedScript);
@@ -58,31 +54,31 @@ const VoiceoverGenerator: React.FC = () => {
     }
   }, []);
 
-  useEffect(() => () => {
-    if (audioUrl) {
-      URL.revokeObjectURL(audioUrl);
-    }
-  }, [audioUrl]);
-
   const handleGenerate = async () => {
     if (!text.trim() || isLoading) return;
 
     setIsLoading(true);
-    if (audioUrl) {
-      URL.revokeObjectURL(audioUrl);
-    }
     setAudioUrl(null);
     try {
-      const { audioData, mimeType } = await generateSpeech(text, selectedVoice.id);
-      const audioBytes = base64ToUint8Array(audioData);
-      const sampleRate = Number(mimeType.match(/rate=(\d+)/)?.[1] || 24000);
-      const isRawPcm = mimeType.startsWith('audio/L16');
-      const blob = isRawPcm
-        ? pcmToWavBlob(audioBytes, sampleRate)
-        : new Blob([audioBytes], { type: mimeType || 'audio/mpeg' });
-      const url = URL.createObjectURL(blob);
-      setDownloadExtension(isRawPcm ? 'wav' : 'mp3');
+      const { data, mimeType } = await generateSpeech(text, selectedVoice.id);
+      
+      // Convert base64 to Blob
+      const byteCharacters = atob(data);
+      const byteNumbers = new Array(byteCharacters.length);
+      for (let i = 0; i < byteCharacters.length; i++) {
+        byteNumbers[i] = byteCharacters.charCodeAt(i);
+      }
+      const byteArray = new Uint8Array(byteNumbers);
+      let audioBlob = new Blob([byteArray], { type: mimeType });
+
+      // If it's PCM, we need to wrap it in a WAV header for the browser to play it
+      if (mimeType.toLowerCase().includes('pcm')) {
+        audioBlob = await pcmToWav(audioBlob);
+      }
+
+      const url = URL.createObjectURL(audioBlob);
       setAudioUrl(url);
+      setAudioMimeType(audioBlob.type);
     } catch (error: any) {
       console.error("TTS Error:", error);
       const errorMsg = error.message || "အသံဖိုင် ထုတ်ယူရာတွင် အခက်အခဲရှိနေပါသည်။";
@@ -94,9 +90,10 @@ const VoiceoverGenerator: React.FC = () => {
 
   const downloadAudio = () => {
     if (!audioUrl) return;
+    const extension = audioMimeType.includes('wav') ? 'wav' : 'mp3';
     const a = document.createElement('a');
     a.href = audioUrl;
-    a.download = `voiceover_${Date.now()}.${downloadExtension}`;
+    a.download = `voiceover_${Date.now()}.${extension}`;
     a.click();
   };
 

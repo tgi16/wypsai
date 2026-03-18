@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useRef, Suspense, lazy } from 'react';
 import { AppTab } from './types';
-import { MENU_GROUPS } from './constants';
+import { DAILY_BUDGET, MENU_GROUPS } from './constants';
 import Sidebar from './components/Sidebar';
 import { FirebaseProvider } from './components/FirebaseContext';
 
@@ -41,6 +41,8 @@ const normalizeUsage = (raw: any) => ({
   lastCost: Number(raw?.lastCost) || 0,
 });
 
+const getUsageDayKey = () => new Date().toLocaleDateString('en-CA');
+
 const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState<AppTab>(AppTab.DASHBOARD);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
@@ -48,7 +50,7 @@ const App: React.FC = () => {
   const mainRef = useRef<HTMLDivElement>(null);
 
   const loadUsage = () => {
-    const today = new Date().toISOString().split('T')[0];
+    const today = getUsageDayKey();
     const savedUsage = JSON.parse(localStorage.getItem('gemini_usage_v2') || '{}');
     if (savedUsage[today]) {
       setUsage(normalizeUsage(savedUsage[today]));
@@ -64,8 +66,9 @@ const App: React.FC = () => {
     return () => window.removeEventListener('gemini_usage_updated', handleUpdate);
   }, []);
 
-  const budget = 5.0;
+  const budget = DAILY_BUDGET;
   const percentage = Math.min((usage.totalCost / budget) * 100, 100);
+  const progressWidth = usage.totalCost > 0 ? Math.max(percentage, 1) : 0;
 
   // Reset scroll to top when tab changes to prevent layout ghosting
   useEffect(() => {
@@ -206,17 +209,17 @@ const App: React.FC = () => {
              <div className="col-span-2 mt-4 p-6 bg-slate-900/50 rounded-[2rem] border border-slate-800/50">
                 <div className="flex justify-between items-center mb-3">
                   <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">API Usage (Today)</span>
-                  <span className="text-xs font-black text-amber-500">${usage.totalCost.toFixed(3)} / $5</span>
+                  <span className="text-xs font-black text-amber-500">${usage.totalCost.toFixed(4)} / ${budget.toFixed(2)}</span>
                 </div>
                 <div className="h-2 bg-slate-950 rounded-full overflow-hidden mb-3">
                   <div 
                     className={`h-full transition-all duration-1000 ${percentage > 80 ? 'bg-red-500' : percentage > 50 ? 'bg-amber-500' : 'bg-emerald-500'}`}
-                    style={{ width: `${percentage}%` }}
+                    style={{ width: `${progressWidth}%` }}
                   />
                 </div>
                 <div className="flex justify-between text-[10px] font-bold text-slate-400">
                   <span>{usage.count} calls made</span>
-                  <span className="text-slate-600">Limit: $5.00</span>
+                  <span className="text-slate-600">{percentage.toFixed(2)}%</span>
                 </div>
              </div>
           </div>

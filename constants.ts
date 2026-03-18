@@ -49,12 +49,15 @@ export const MENU_GROUPS = [
 ];
 
 export const PRICING = {
+  'gemini-3-pro-preview': { input: 3.5 / 1000000, output: 10.5 / 1000000 }, // Estimated to match current 3.1 preview pricing
   'gemini-3.1-pro-preview': { input: 3.5 / 1000000, output: 10.5 / 1000000 },
   'gemini-3-flash-preview': { input: 0.075 / 1000000, output: 0.3 / 1000000 },
   'gemini-2.5-flash-preview-tts': { input: 0.1 / 1000000, output: 0.1 / 1000000 }, // Estimated
   'gemini-1.5-pro': { input: 3.5 / 1000000, output: 10.5 / 1000000 },
   'gemini-1.5-flash': { input: 0.075 / 1000000, output: 0.3 / 1000000 },
 };
+
+export const DAILY_BUDGET = 5.0;
 
 export interface UsageMetadata {
   promptTokenCount: number;

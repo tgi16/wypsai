@@ -1,6 +1,14 @@
 
 import { MarketingContent, MarketTrend, DailyPlan, SalesScript, DailyContent, EngagementPost, ClientGuide, PremiumPromotion, AutoReply } from "./types";
-import { PRICING, UsageMetadata } from "./constants";
+import { DAILY_BUDGET, PRICING, UsageMetadata } from "./constants";
+
+const getUsageDayKey = () => new Date().toLocaleDateString('en-CA');
+
+const getTodayUsageSnapshot = () => {
+  const savedUsage = JSON.parse(localStorage.getItem('gemini_usage_v2') || '{}');
+  const today = getUsageDayKey();
+  return savedUsage[today] || { totalCost: 0, count: 0, lastCost: 0 };
+};
 
 /**
  * Track and store Gemini API usage cost in localStorage
@@ -10,7 +18,7 @@ const trackUsage = (model: string, usage: UsageMetadata) => {
     const pricing = (PRICING as any)[model] || PRICING['gemini-3-flash-preview'];
     const cost = (usage.promptTokenCount * pricing.input) + (usage.candidatesTokenCount * pricing.output);
     
-    const today = new Date().toISOString().split('T')[0];
+    const today = getUsageDayKey();
     const savedUsage = JSON.parse(localStorage.getItem('gemini_usage_v2') || '{}');
     
     if (!savedUsage[today]) {
@@ -95,6 +103,11 @@ User Feedback History:
  * Proxy call to the server-side Gemini endpoint
  */
 export const callGeminiProxy = async (params: { model: string, contents: any, config?: any }) => {
+  const todayUsage = getTodayUsageSnapshot();
+  if ((Number(todayUsage.totalCost) || 0) >= DAILY_BUDGET) {
+    throw new Error(`ဒီနေ့ API usage budget $${DAILY_BUDGET.toFixed(2)} ပြည့်သွားပါပြီ။ မနက်ဖြန်မှ ပြန်သုံးပါ သို့မဟုတ် budget ကို ပြန်ညှိပါ။`);
+  }
+
   const response = await fetch("/api/gemini", {
     method: "POST",
     headers: {

@@ -24,6 +24,36 @@ const QUICK_HINTS = [
   'customer pain point ထည့်ပါ',
 ] as const;
 
+const formatFacebookCaption = (text: string): string => {
+  const normalized = text.replace(/\r\n/g, '\n').trim();
+  if (!normalized) return text;
+
+  const existingParagraphs = normalized
+    .split(/\n{2,}/)
+    .map((paragraph) => paragraph.trim())
+    .filter(Boolean);
+
+  if (existingParagraphs.length >= 3) {
+    return existingParagraphs.join('\n\n');
+  }
+
+  const sentenceChunks = normalized
+    .split(/(?<=[.!?။…])\s+/)
+    .map((sentence) => sentence.trim())
+    .filter(Boolean);
+
+  if (sentenceChunks.length <= 2) {
+    return normalized;
+  }
+
+  const grouped: string[] = [];
+  for (let index = 0; index < sentenceChunks.length; index += 2) {
+    grouped.push(sentenceChunks.slice(index, index + 2).join(' ').trim());
+  }
+
+  return grouped.join('\n\n');
+};
+
 const ContentGenerator: React.FC<ContentGeneratorProps> = ({ onNavigate }) => {
   const [description, setDescription] = useState('');
   const [loading, setLoading] = useState(false);
@@ -199,8 +229,12 @@ const ContentGenerator: React.FC<ContentGeneratorProps> = ({ onNavigate }) => {
     setStatusMsg('Caption နဲ့ TikTok plan ကို generate လုပ်နေပါသည်...');
     try {
       const data = await generateMarketingContent(buildGenerationPrompt(), image || undefined);
-      setResult(data);
-      saveToHistory(data);
+      const formattedData = {
+        ...data,
+        facebookCaption: formatFacebookCaption(data.facebookCaption),
+      };
+      setResult(formattedData);
+      saveToHistory(formattedData);
     } catch (error: any) {
       console.error(error);
       setErrorMsg(error?.message || "အကြောင်းအရာ ထုတ်ပေးလို့ မရပါဘူး။");
@@ -217,7 +251,7 @@ const ContentGenerator: React.FC<ContentGeneratorProps> = ({ onNavigate }) => {
     setStatusMsg(`${label} အတွက် caption ကို ပြန်ညှိနေပါသည်...`);
     try {
       const refinedCaption = await refineMarketingText(result.facebookCaption, instruction, description);
-      setResult({ ...result, facebookCaption: refinedCaption });
+      setResult({ ...result, facebookCaption: formatFacebookCaption(refinedCaption) });
       setToastMsg(`${label} version ကို ပြန်ထုတ်ပြီးပါပြီ!`);
       setTimeout(() => setToastMsg(''), 3000);
     } catch (error: any) {

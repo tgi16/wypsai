@@ -251,7 +251,8 @@ Rules:
 1. Keep the original language unchanged.
 2. Preserve brand fit for With You Photo Studio, Taunggyi.
 3. Keep the result natural and ready to post.
-4. Return JSON only.
+4. Keep the text in clean, readable short paragraphs for Facebook. Preserve or improve paragraph breaks instead of merging everything into one long block.
+5. Return JSON only.
 
 Optional context:
 ${context || 'None'}

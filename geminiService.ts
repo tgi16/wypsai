@@ -59,6 +59,7 @@ With You Photo Studio, Taunggyi (Myanmar)
 - DO NOT translate "Indoor photo shoot" to "အိမ်တွင်းရိုက်ကူးရေး". Always use the English term "Indoor photo shoot" or "Indoor".
 - Use natural, conversational Burmese mixed with common English photography terms (e.g., lighting, pose, mood, vibe). Avoid overly formal, stiff, or direct dictionary translations.
 - ALWAYS include these core hashtags at the end of every post/caption: #WithYouPhotoStudio #Taunggyi #wyps #taunggyiphotographer
+- When a post needs a soft booking CTA, prefer natural lines such as "ခုပဲ Booking တင်လိုက်ပါ" or "အသေးစိတ်ကို Message မှာ မေးမြန်းနိုင်ပါပြီ" instead of robotic closing lines.
 
 - Pre-wedding Packages: 350k (Sweet Memo), 500k (Style Fusion), 650k (Elegance Duo), 1M (Grand Royal). 
   ***သတိပြုရန်: Pre-wedding packages အားလုံးသည် Limited Softcopy သာ ရမည်။ Unlimited လုံးဝ မရပါ။***
@@ -200,6 +201,7 @@ export const generateMarketingContent = async (
     တင်းကျပ်သော လမ်းညွှန်ချက်များ:
     1. Package စျေးနှုန်းများ (ဥပမာ- 350k, 500k စသည်) ကို ပိုစ့်ထဲတွင် လုံးဝ (လုံးဝ) မထည့်ပါနှင့်။ Content ၏ အနှစ်သာရ၊ ခံစားချက် (Emotion) နှင့် Storytelling ကိုသာ အဓိကထား ရေးသားပါ။
     2. ဖတ်ရတာ ဆွဲဆောင်မှုရှိစေရန် သင့်တော်သော Emoji များ (ဥပမာ- ✨📸💖) ထည့်သွင်း အသုံးပြုပေးပါ။
+    3. CTA လိုအပ်ပါက သဘာဝကျကျ soft CTA တစ်ကြောင်း ထည့်ပေးပါ။ ဥပမာ - "ခုပဲ Booking တင်လိုက်ပါ" သို့မဟုတ် "အသေးစိတ်ကို Message မှာ မေးမြန်းနိုင်ပါပြီ"။
     
     Context: ${STUDIO_CONTEXT} ${getFeedbackContext()}
     User Input: ${description}` }];
@@ -432,6 +434,7 @@ export const generateEngagementPost = async (topic: string, type: string): Promi
     3. စာသားများကို လူငယ်ကြိုက် ပေါ့ပေါ့ပါးပါး (Conversational) မြန်မာလို ရေးပါ။
     4. Caption ၏ အဆုံးတွင် မဖြစ်မနေ #WithYouPhotoStudio #Taunggyi #wyps #taunggyiphotographer နှင့် အခြား သက်ဆိုင်ရာ Hashtag များ ထည့်ပေးပါ။
     5. Indoor ပုံများကိုသာ အခြေခံ၍ မည်သို့သော ပုံမျိုး တင်သင့်ကြောင်း Visual Idea ကို အကြံပြုပါ။
+    6. Booking/Message CTA လိုအပ်ပါက "ခုပဲ Booking တင်လိုက်ပါ" သို့မဟုတ် "အသေးစိတ်ကို Message မှာ မေးမြန်းနိုင်ပါပြီ" ကို သဘာဝကျကျ တစ်ကြောင်းထည့်နိုင်သည်။
     
     Context: ${STUDIO_CONTEXT} ${getFeedbackContext()}`,
     config: {
@@ -498,6 +501,7 @@ export const generatePremiumPromotion = async (occasion: string): Promise<Premiu
     2. "အိမ်တွင်းရိုက်ကူးရေး" ဟု လုံးဝ မသုံးပါနှင့်။ "Indoor photo shoot" ဟုသာ သုံးပါ။
     3. Pre-wedding package များသည် Limited Softcopy သာ ရမည်ဆိုသည့် စည်းမျဉ်းကို မချိုးဖောက်ပါနှင့်။ (Unlimited ပေးမည်ဟု လုံးဝ မရေးရ)
     4. Facebook တွင် တင်ရန် ဆွဲဆောင်မှုရှိသော Caption တစ်ခု အပါအဝင် ရေးပေးပါ။ Caption အဆုံးတွင် #WithYouPhotoStudio #Taunggyi #wyps #taunggyiphotographer ထည့်ပါ။
+    5. Caption ထဲတွင် လိုအပ်ပါက "ခုပဲ Booking တင်လိုက်ပါ" သို့မဟုတ် "အသေးစိတ်ကို Message မှာ မေးမြန်းနိုင်ပါပြီ" ကို soft CTA အဖြစ် သဘာဝကျကျ ထည့်ပေးပါ။
     
     Context: ${STUDIO_CONTEXT} ${getFeedbackContext()}`,
     config: {
@@ -613,7 +617,7 @@ export const generateSeasonalCampaign = async (season: string): Promise<{ title:
     လိုအပ်ချက်များ:
     1. Campaign Title (မြန်မာလို)။
     2. Viral ဖြစ်စေမည့် Content Ideas ၃ ခု (မြန်မာလို)။
-    3. အထူး Promotion အစီအစဉ် (စျေးနှုန်းနှင့်တကွ)။
+    3. အထူး Promotion အစီအစဉ် (စျေးနှုန်းနှင့်တကွ)။ လိုအပ်ပါက "ခုပဲ Booking တင်လိုက်ပါ" သို့မဟုတ် "အသေးစိတ်ကို Message မှာ မေးမြန်းနိုင်ပါပြီ" လို soft CTA တစ်ကြောင်းပါနိုင်သည်။
     4. အင်္ဂလိပ်စာ လုံးဝ မသုံးရ။`,
     config: {
       responseMimeType: "application/json",

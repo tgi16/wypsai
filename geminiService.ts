@@ -238,6 +238,44 @@ export const generateMarketingContent = async (
   return JSON.parse(response.text || '{}');
 };
 
+export const refineMarketingText = async (
+  currentText: string,
+  instruction: string,
+  context?: string
+): Promise<string> => {
+  const response = await handleResponse(() => callGeminiProxy({
+    model: 'gemini-3-flash-preview',
+    contents: `Improve the following Myanmar marketing copy.
+
+Rules:
+1. Keep the original language unchanged.
+2. Preserve brand fit for With You Photo Studio, Taunggyi.
+3. Keep the result natural and ready to post.
+4. Return JSON only.
+
+Optional context:
+${context || 'None'}
+
+Instruction:
+${instruction}
+
+Current text:
+${currentText}`,
+    config: {
+      responseMimeType: "application/json",
+      responseSchema: {
+        type: Type.OBJECT,
+        properties: {
+          text: { type: Type.STRING },
+        },
+        required: ["text"]
+      }
+    }
+  }));
+
+  return JSON.parse(response.text || '{"text": ""}').text || currentText;
+};
+
 export const generateSalesScripts = async (scenario: string, customQuestion?: string): Promise<SalesScript> => {
   const prompt = customQuestion 
     ? `Client က အခုလို မေးလာပါတယ်: "${customQuestion}" \n\n With You Photo Studio, Taunggyi ရဲ့ Professional ဆန်စွာ မြန်မာဘာသာဖြင့် ပြန်လည်ဖြေကြားပေးပါ။ 

@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { generateMarketingContent } from '../geminiService';
+import { generateMarketingContent, refineMarketingText } from '../geminiService';
 import { MarketingContent, AppTab } from '../types';
 import Feedback from '../components/Feedback';
 import imageCompression from 'browser-image-compression';
@@ -16,6 +16,14 @@ interface ContentGeneratorProps {
   onNavigate?: (tab: AppTab) => void;
 }
 
+const QUICK_HINTS = [
+  'အစစာကြောင်း ပိုဆွဲဆောင်စေပါ',
+  'စာပိုဒ်တိုတိုနဲ့ ဖတ်ရလွယ်အောင်',
+  'storytelling ပိုပါစေ',
+  'soft booking CTA ပါစေ',
+  'customer pain point ထည့်ပါ',
+] as const;
+
 const ContentGenerator: React.FC<ContentGeneratorProps> = ({ onNavigate }) => {
   const [description, setDescription] = useState('');
   const [loading, setLoading] = useState(false);
@@ -24,6 +32,10 @@ const ContentGenerator: React.FC<ContentGeneratorProps> = ({ onNavigate }) => {
   const [compressedImageFile, setCompressedImageFile] = useState<File | null>(null);
   const [compressing, setCompressing] = useState(false);
   const [toastMsg, setToastMsg] = useState('');
+  const [statusMsg, setStatusMsg] = useState('');
+  const [errorMsg, setErrorMsg] = useState('');
+  const [selectedHints, setSelectedHints] = useState<string[]>([]);
+  const [refiningAction, setRefiningAction] = useState('');
   
   const [fbToken, setFbToken] = useState('');
   const [fbPageId, setFbPageId] = useState('');
@@ -37,11 +49,19 @@ const ContentGenerator: React.FC<ContentGeneratorProps> = ({ onNavigate }) => {
     const savedToken = localStorage.getItem('fb_page_token');
     const savedPageId = localStorage.getItem('fb_page_id');
     const pendingTopic = localStorage.getItem('wyp_content_topic');
+    const savedHints = localStorage.getItem('wyp_content_hints');
     if (savedToken) setFbToken(savedToken);
     if (savedPageId) setFbPageId(savedPageId);
     if (pendingTopic) {
       setDescription(pendingTopic);
       localStorage.removeItem('wyp_content_topic');
+    }
+    if (savedHints) {
+      try {
+        setSelectedHints(JSON.parse(savedHints));
+      } catch (e) {
+        console.error('Failed to parse content hints', e);
+      }
     }
 
     const savedHistory = localStorage.getItem('wyp_content_history');
@@ -90,6 +110,8 @@ const ContentGenerator: React.FC<ContentGeneratorProps> = ({ onNavigate }) => {
 
     try {
       setCompressing(true);
+      setErrorMsg('');
+      setStatusMsg('ပုံကို post အတွက် ပြင်ဆင်နေပါသည်...');
       const options = {
         maxSizeMB: 3.5,
         maxWidthOrHeight: 2048,
@@ -103,9 +125,10 @@ const ContentGenerator: React.FC<ContentGeneratorProps> = ({ onNavigate }) => {
       reader.readAsDataURL(compressedFile);
     } catch (error) {
       console.error(error);
-      alert("ပုံကို ချုံ့ရာတွင် အခက်အခဲရှိနေပါသည်။");
+      setErrorMsg("ပုံကို ချုံ့ရာတွင် အခက်အခဲရှိနေပါသည်။");
     } finally {
       setCompressing(false);
+      setStatusMsg('');
     }
   };
 
@@ -122,6 +145,8 @@ const ContentGenerator: React.FC<ContentGeneratorProps> = ({ onNavigate }) => {
     if (!result?.facebookCaption) return;
 
     setPosting(true);
+    setErrorMsg('');
+    setStatusMsg('Facebook သို့ post တင်နေပါသည်...');
     try {
       const formData = new FormData();
       formData.append('source', compressedImageFile);
@@ -146,25 +171,61 @@ const ContentGenerator: React.FC<ContentGeneratorProps> = ({ onNavigate }) => {
       if (errorMessage.includes("Unsupported post request") || errorMessage.includes("missing permissions")) {
         errorMessage = "Page Access Token အမှန် မဟုတ်ပါ (သို့) Permission မပြည့်စုံပါ။\n\nကျေးဇူးပြု၍ Graph API Explorer တွင်:\n1. User Token အစား 'Get Page Access Token' ကို ရွေးပါ။\n2. 'pages_manage_posts' နှင့် 'pages_read_engagement' permission များ ထည့်ပါ။\n3. Generate လုပ်ထားသော Token အသစ်ကို ပြန်ထည့်ပါ။";
       }
-      alert("Facebook သို့ တင်ရာတွင် အခက်အခဲရှိနေပါသည်:\n\n" + errorMessage);
+      setErrorMsg("Facebook သို့ တင်ရာတွင် အခက်အခဲရှိနေပါသည်: " + errorMessage);
     } finally {
       setPosting(false);
+      setStatusMsg('');
     }
+  };
+
+  const buildGenerationPrompt = () => {
+    if (!selectedHints.length) return description;
+    return `${description}\n\nExtra directions:\n- ${selectedHints.join('\n- ')}`;
+  };
+
+  const toggleHint = (hint: string) => {
+    const updated = selectedHints.includes(hint)
+      ? selectedHints.filter((item) => item !== hint)
+      : [...selectedHints, hint];
+    setSelectedHints(updated);
+    localStorage.setItem('wyp_content_hints', JSON.stringify(updated));
   };
 
   const handleGenerate = async () => {
     if (!description && !image) return;
     setLoading(true);
     setResult(null);
+    setErrorMsg('');
+    setStatusMsg('Caption နဲ့ TikTok plan ကို generate လုပ်နေပါသည်...');
     try {
-      const data = await generateMarketingContent(description, image || undefined);
+      const data = await generateMarketingContent(buildGenerationPrompt(), image || undefined);
       setResult(data);
       saveToHistory(data);
-    } catch (error) {
+    } catch (error: any) {
       console.error(error);
-      alert("အကြောင်းအရာ ထုတ်ပေးလို့ မရပါဘူး။");
+      setErrorMsg(error?.message || "အကြောင်းအရာ ထုတ်ပေးလို့ မရပါဘူး။");
     } finally {
       setLoading(false);
+      setStatusMsg('');
+    }
+  };
+
+  const refineFacebookCaption = async (instruction: string, label: string) => {
+    if (!result?.facebookCaption || refiningAction) return;
+    setRefiningAction(label);
+    setErrorMsg('');
+    setStatusMsg(`${label} အတွက် caption ကို ပြန်ညှိနေပါသည်...`);
+    try {
+      const refinedCaption = await refineMarketingText(result.facebookCaption, instruction, description);
+      setResult({ ...result, facebookCaption: refinedCaption });
+      setToastMsg(`${label} version ကို ပြန်ထုတ်ပြီးပါပြီ!`);
+      setTimeout(() => setToastMsg(''), 3000);
+    } catch (error: any) {
+      console.error(error);
+      setErrorMsg(error?.message || "Caption ကို ပြန်ညှိလို့ မရပါဘူး။");
+    } finally {
+      setRefiningAction('');
+      setStatusMsg('');
     }
   };
 
@@ -186,6 +247,13 @@ const ContentGenerator: React.FC<ContentGeneratorProps> = ({ onNavigate }) => {
       {toastMsg && (
         <div className="fixed top-6 left-1/2 -translate-x-1/2 z-[60] bg-amber-500 text-slate-950 px-6 py-3 rounded-full shadow-2xl font-black text-sm animate-in fade-in slide-in-from-top-4">
           ✨ {toastMsg}
+        </div>
+      )}
+
+      {(statusMsg || errorMsg) && (
+        <div className={`rounded-2xl border px-5 py-4 text-sm ${errorMsg ? 'bg-red-500/10 border-red-500/20 text-red-200' : 'bg-blue-500/10 border-blue-500/20 text-blue-100'}`}>
+          <div className="font-bold">{errorMsg ? 'Action Needed' : 'Working'}</div>
+          <p className="mt-1">{errorMsg || statusMsg}</p>
         </div>
       )}
 
@@ -250,6 +318,29 @@ const ContentGenerator: React.FC<ContentGeneratorProps> = ({ onNavigate }) => {
                 placeholder="ဥပမာ- ဒီနေ့ တောင်ကြီးစတူဒီယိုမှာ ရိုက်ဖြစ်တဲ့ Pre-wedding လေးအကြောင်း..."
                 className="w-full h-40 bg-slate-950 border border-slate-800 rounded-2xl p-5 focus:ring-2 focus:ring-amber-500 outline-none transition-all text-sm leading-relaxed text-slate-200 resize-none"
               />
+            </div>
+
+            <div className="mb-6">
+              <label className="text-[10px] font-black text-slate-500 uppercase tracking-[0.2em] block mb-3">Quick Add</label>
+              <div className="flex flex-wrap gap-2">
+                {QUICK_HINTS.map((hint) => {
+                  const active = selectedHints.includes(hint);
+                  return (
+                    <button
+                      key={hint}
+                      type="button"
+                      onClick={() => toggleHint(hint)}
+                      className={`px-3 py-2 rounded-full text-[10px] font-black transition-all border ${
+                        active
+                          ? 'bg-amber-500 text-slate-950 border-amber-400'
+                          : 'bg-slate-950 text-slate-400 border-slate-800 hover:border-slate-700'
+                      }`}
+                    >
+                      {hint}
+                    </button>
+                  );
+                })}
+              </div>
             </div>
 
             <div className="mb-8">
@@ -355,6 +446,29 @@ const ContentGenerator: React.FC<ContentGeneratorProps> = ({ onNavigate }) => {
                  </div>
                  <div className="bg-slate-950/80 p-6 rounded-2xl text-slate-200 text-sm leading-relaxed border border-slate-800/50 mb-6 font-medium whitespace-pre-wrap">
                     {result.facebookCaption}
+                 </div>
+                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-6">
+                   <button 
+                    onClick={() => refineFacebookCaption('Make the opening hook stronger and more thumb-stopping, while keeping the rest natural.', 'ပိုဆွဲဆောင်တဲ့ Hook')}
+                    disabled={!!refiningAction}
+                    className="py-3 bg-slate-950 hover:bg-slate-900 disabled:opacity-50 text-slate-200 rounded-xl font-black text-[10px] border border-slate-800 transition-colors"
+                   >
+                     {refiningAction === 'ပိုဆွဲဆောင်တဲ့ Hook' ? 'REFINING...' : 'HOOK ပိုကောင်းအောင်'}
+                   </button>
+                   <button 
+                    onClick={() => refineFacebookCaption('Keep the post warm but make the CTA softer and more natural for booking inquiries.', 'ပိုနူးညံ့တဲ့ CTA')}
+                    disabled={!!refiningAction}
+                    className="py-3 bg-slate-950 hover:bg-slate-900 disabled:opacity-50 text-slate-200 rounded-xl font-black text-[10px] border border-slate-800 transition-colors"
+                   >
+                     {refiningAction === 'ပိုနူးညံ့တဲ့ CTA' ? 'REFINING...' : 'CTA ပိုနူးညံ့အောင်'}
+                   </button>
+                   <button 
+                    onClick={() => refineFacebookCaption('Shorten the caption slightly so it is easier to read quickly, without losing the main message.', 'ပိုတိုတဲ့ Version')}
+                    disabled={!!refiningAction}
+                    className="py-3 bg-slate-950 hover:bg-slate-900 disabled:opacity-50 text-slate-200 rounded-xl font-black text-[10px] border border-slate-800 transition-colors"
+                   >
+                     {refiningAction === 'ပိုတိုတဲ့ Version' ? 'REFINING...' : 'SHORTER VERSION'}
+                   </button>
                  </div>
                  <div className="flex flex-col sm:flex-row gap-3">
                    <button 

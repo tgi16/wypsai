@@ -343,7 +343,7 @@ const PosBookingTracker: React.FC<PosBookingTrackerProps> = ({ onNavigate }) => 
       booking.status,
       booking.workStatus,
       booking.notes,
-    ].some((value) => value.toLowerCase().includes(keyword)));
+    ].some((value) => typeof value === 'string' && value.toLowerCase().includes(keyword)));
   }, [bookings, search]);
 
   const grouped = useMemo(() => {

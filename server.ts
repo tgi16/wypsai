@@ -15,6 +15,11 @@ async function startServer() {
 
   // Gemini API Proxy
   app.post("/api/gemini", async (req, res) => {
+    const expectedSecret = process.env.WYPS_API_SECRET;
+    if (expectedSecret && req.headers["x-wyps-secret"] !== expectedSecret) {
+      return res.status(401).json({ error: "Unauthorized" });
+    }
+
     try {
       const apiKey = process.env.GEMINI_API_KEY;
       if (!apiKey) {

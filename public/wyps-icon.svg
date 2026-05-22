@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <!-- Background -->
+  <rect width="512" height="512" rx="96" fill="#0b1120"/>
+  <!-- Gold ring accent -->
+  <circle cx="256" cy="256" r="200" fill="none" stroke="#f59e0b" stroke-width="8" opacity="0.25"/>
+  <!-- Camera body -->
+  <rect x="128" y="192" width="256" height="176" rx="20" fill="#1e293b"/>
+  <!-- Camera top bump -->
+  <rect x="192" y="168" width="80" height="32" rx="10" fill="#1e293b"/>
+  <!-- Lens outer ring -->
+  <circle cx="256" cy="280" r="64" fill="#0b1120" stroke="#f59e0b" stroke-width="5"/>
+  <!-- Lens inner -->
+  <circle cx="256" cy="280" r="44" fill="#0f172a"/>
+  <circle cx="256" cy="280" r="28" fill="#1e293b"/>
+  <circle cx="256" cy="280" r="14" fill="#f59e0b" opacity="0.9"/>
+  <!-- Flash dot -->
+  <circle cx="340" cy="220" r="10" fill="#f59e0b"/>
+  <!-- "WY" text below -->
+  <text x="256" y="410" font-family="Arial Black, Arial, sans-serif" font-weight="900" font-size="52" fill="#f59e0b" text-anchor="middle" letter-spacing="4">WYPS</text>
+</svg>

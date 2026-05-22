@@ -1,6 +1,7 @@
 
 import { MarketingContent, MarketTrend, DailyPlan, SalesScript, DailyContent, EngagementPost, ClientGuide, PremiumPromotion, AutoReply } from "./types";
 import { DAILY_BUDGET, PRICING, UsageMetadata } from "./constants";
+import { getSavedPricingContext } from "./pricingCatalog";
 
 const getUsageDayKey = () => new Date().toLocaleDateString('en-CA');
 
@@ -15,19 +16,25 @@ const getTodayUsageSnapshot = () => {
  */
 const trackUsage = (model: string, usage: UsageMetadata) => {
   try {
-    const pricing = (PRICING as any)[model] || PRICING['gemini-3-flash-preview'];
-    const cost = (usage.promptTokenCount * pricing.input) + (usage.candidatesTokenCount * pricing.output);
+    const pricing = (PRICING as any)[model] || PRICING['gemini-2.5-flash'];
+    const promptTokens = Number(usage.promptTokenCount) || 0;
+    const outputTokens = Number(usage.candidatesTokenCount) || 0;
+    const cost = (promptTokens * pricing.input) + (outputTokens * pricing.output);
     
     const today = getUsageDayKey();
     const savedUsage = JSON.parse(localStorage.getItem('gemini_usage_v2') || '{}');
     
     if (!savedUsage[today]) {
-      savedUsage[today] = { totalCost: 0, count: 0 };
+      savedUsage[today] = { totalCost: 0, count: 0, models: {} };
     }
     
     savedUsage[today].totalCost += cost;
     savedUsage[today].count += 1;
     savedUsage[today].lastCost = cost;
+    savedUsage[today].models = savedUsage[today].models || {};
+    savedUsage[today].models[model] = savedUsage[today].models[model] || { cost: 0, count: 0 };
+    savedUsage[today].models[model].cost += cost;
+    savedUsage[today].models[model].count += 1;
     
     localStorage.setItem('gemini_usage_v2', JSON.stringify(savedUsage));
     
@@ -61,17 +68,8 @@ With You Photo Studio, Taunggyi (Myanmar)
 - ALWAYS include these core hashtags at the end of every post/caption: #WithYouPhotoStudio #Taunggyi #wyps #taunggyiphotographer
 - When a post needs a soft booking CTA, prefer natural lines such as "ခုပဲ Booking တင်လိုက်ပါ" or "အသေးစိတ်ကို Message မှာ မေးမြန်းနိုင်ပါပြီ" instead of robotic closing lines.
 
-- Pre-wedding Packages: 350k (Sweet Memo), 500k (Style Fusion), 650k (Elegance Duo), 1M (Grand Royal). 
-  ***သတိပြုရန်: Pre-wedding packages အားလုံးသည် Limited Softcopy သာ ရမည်။ Unlimited လုံးဝ မရပါ။***
-
-- မင်္ဂလာဆွမ်းကပ် (Monk Offering) [Taunggyi Only]:
-  * 480,000 MMK (2 Cam). Options: (1) 70 Softcopy + 16x24 Frame OR (2) 50 Print + 16x24 Frame.
-  * အထူးချက်: ပွဲအစအဆုံး ရိုက်သမျှ Raw & Edit အားလုံးကို CD ဖြင့် ပေးအပ်မည်။ (Unlimited Raw).
-
-- အလှူပွဲနေ့ (Donation Day):
-  * 1 Camera: 390,000 MMK. Options: (1) 60 Softcopy + 12x18 Frame OR (2) 40 Print + 12x18 Frame.
-  * 2 Camera: 500,000 MMK. Options: (1) 70 Softcopy + 16x24 Frame OR (2) 50 Print + 16x24 Frame.
-  * အထူးချက်: ပွဲအစအဆုံး ရိုက်သမျှ Raw & Edit အားလုံးကို CD ဖြင့် ပေးအပ်မည်။ (Unlimited Raw).
+- Pricing / package source of truth: WYPS-POS public/js/master-data.js direction and its Firestore packages collection.
+- If price/package details are needed, use the CURRENT POS PACKAGE PRICE SOURCE appended below. Do not rely on old hardcoded price memory.
 
 - Extra Time Policy:
   * ၃ နာရီကျော်ပါက အချိန်ပို ၃၀ မိနစ် (၃ သောင်းကျပ်)၊ ၁ နာရီ (၅ သောင်းကျပ်) ထပ်ဆောင်းပေးရမည်။
@@ -80,6 +78,8 @@ With You Photo Studio, Taunggyi (Myanmar)
 
 CRITICAL RULE: "With You Photo Studio" ဟူသော အမည်ကို မြန်မာလို (ဥပမာ- ဝစ်သ်ယူဓာတ်ပုံတိုက်) ဟု လုံးဝ (လုံးဝ) မဘာသာပြန်ပါနှင့်။ အင်္ဂလိပ်လိုသာ "With You Photo Studio" ဟု အမြဲတမ်း သုံးနှုန်းပါ။
 `;
+
+const getStudioContext = () => `${STUDIO_CONTEXT}\n${getSavedPricingContext()}`;
 
 const getFeedbackContext = () => {
   try {
@@ -100,35 +100,130 @@ User Feedback History:
   }
 };
 
+type GeminiModelProfile = 'quality' | 'balanced' | 'fast' | 'tts';
+
+const MODEL_ROUTES: Record<GeminiModelProfile, string[]> = {
+  quality: ['gemini-2.5-pro', 'gemini-2.5-flash'],
+  balanced: ['gemini-2.5-flash', 'gemini-2.5-pro'],
+  fast: ['gemini-2.5-flash'],
+  tts: ['gemini-2.5-flash-preview-tts'],
+};
+
+const isModelProfile = (model: string): model is GeminiModelProfile => model in MODEL_ROUTES;
+
+const resolveModelRoute = (model: string) => isModelProfile(model) ? MODEL_ROUTES[model] : [model];
+
+const dataUriToBlob = async (dataUri: string) => {
+  const response = await fetch(dataUri);
+  return response.blob();
+};
+
+const shrinkImageDataUri = async (
+  imageUri: string,
+  options: { maxDimension: number; quality: number; mimeType?: string }
+) => {
+  if (typeof window === 'undefined' || !imageUri.startsWith('data:image/')) {
+    return imageUri;
+  }
+
+  const blob = await dataUriToBlob(imageUri);
+  const imageUrl = URL.createObjectURL(blob);
+
+  try {
+    const image = await new Promise<HTMLImageElement>((resolve, reject) => {
+      const element = new Image();
+      element.onload = () => resolve(element);
+      element.onerror = () => reject(new Error('Image preview could not be loaded'));
+      element.src = imageUrl;
+    });
+
+    const scale = Math.min(options.maxDimension / image.width, options.maxDimension / image.height, 1);
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.max(1, Math.round(image.width * scale));
+    canvas.height = Math.max(1, Math.round(image.height * scale));
+
+    const context = canvas.getContext('2d');
+    if (!context) return imageUri;
+
+    context.drawImage(image, 0, 0, canvas.width, canvas.height);
+    return canvas.toDataURL(options.mimeType || 'image/jpeg', options.quality);
+  } finally {
+    URL.revokeObjectURL(imageUrl);
+  }
+};
+
+const extractInlineData = async (
+  imageUri: string,
+  options: { maxDimension: number; quality: number; mimeType?: string }
+) => {
+  const optimizedImageUri = await shrinkImageDataUri(imageUri, options);
+  const [header, data = ''] = optimizedImageUri.split(',');
+  const mimeMatch = header.match(/^data:(.*?);base64$/);
+  return {
+    mimeType: mimeMatch?.[1] || options.mimeType || 'image/jpeg',
+    data,
+  };
+};
+
 /**
  * Proxy call to the server-side Gemini endpoint
  */
 export const callGeminiProxy = async (params: { model: string, contents: any, config?: any }) => {
   const todayUsage = getTodayUsageSnapshot();
   if ((Number(todayUsage.totalCost) || 0) >= DAILY_BUDGET) {
-    throw new Error(`ဒီနေ့ API usage budget $${DAILY_BUDGET.toFixed(2)} ပြည့်သွားပါပြီ။ မနက်ဖြန်မှ ပြန်သုံးပါ သို့မဟုတ် budget ကို ပြန်ညှိပါ။`);
+    const message = `ဒီနေ့ API usage budget $${DAILY_BUDGET.toFixed(2)} ပြည့်သွားပါပြီ။ မနက်ဖြန်မှ ပြန်သုံးပါ သို့မဟုတ် budget ကို ပြန်ညှိပါ။`;
+    window.dispatchEvent(new CustomEvent('wyps_app_notice', { detail: { type: 'budget', message } }));
+    throw new Error(message);
   }
 
-  const response = await fetch("/api/gemini", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(params),
-  });
+  const modelRoute = resolveModelRoute(params.model);
+  let lastErrorMessage = '';
 
-  const data = await response.json();
-  
-  if (!response.ok) {
-    throw new Error(data.error || "Failed to call Gemini API");
+  const requestHeaders: Record<string, string> = { "Content-Type": "application/json" };
+  const apiSecret = (import.meta as any).env?.VITE_WYPS_API_SECRET;
+  if (apiSecret) requestHeaders["x-wyps-secret"] = apiSecret;
+
+  for (const model of modelRoute) {
+    const response = await fetch("/api/gemini", {
+      method: "POST",
+      headers: requestHeaders,
+      body: JSON.stringify({ ...params, model }),
+    });
+
+    const rawText = await response.text();
+    const contentType = response.headers.get('content-type') || '';
+    const data = contentType.includes('application/json')
+      ? JSON.parse(rawText || '{}')
+      : { error: rawText || 'Unexpected server response' };
+    
+    if (!response.ok) {
+      if (response.status === 413) {
+        const message = 'ပို့လိုက်တဲ့ image data က အရမ်းကြီးနေပါတယ်။ Photo အရေအတွက် လျှော့ပြီး သို့မဟုတ် smaller image နဲ့ပြန်စမ်းပါ။';
+        window.dispatchEvent(new CustomEvent('wyps_app_notice', { detail: { type: 'error', message } }));
+        throw new Error(message);
+      }
+
+      lastErrorMessage = data.error || `Failed to call Gemini API (${model})`;
+      if (modelRoute.length > 1) {
+        console.warn(`Gemini model ${model} failed. Trying fallback model...`, lastErrorMessage);
+        continue;
+      }
+
+      window.dispatchEvent(new CustomEvent('wyps_app_notice', { detail: { type: 'error', message: lastErrorMessage } }));
+      throw new Error(lastErrorMessage);
+    }
+
+    // Track usage if metadata is available. Use the actual model, not the route profile.
+    if (data.usageMetadata) {
+      trackUsage(model, data.usageMetadata);
+    }
+
+    return { ...data, modelUsed: model };
   }
 
-  // Track usage if metadata is available
-  if (data.usageMetadata) {
-    trackUsage(params.model, data.usageMetadata);
-  }
-
-  return data;
+  const message = lastErrorMessage || "Failed to call Gemini API";
+  window.dispatchEvent(new CustomEvent('wyps_app_notice', { detail: { type: 'error', message } }));
+  throw new Error(message);
 };
 
 /**
@@ -162,7 +257,7 @@ export const handleResponse = async <T>(promiseFn: () => Promise<T>, retries = 3
 
 export const generateDailyMarketingPlan = async (): Promise<DailyPlan> => {
   const response = await handleResponse(() => callGeminiProxy({
-    model: 'gemini-3-pro-preview',
+    model: 'balanced',
     contents: `With You Photo Studio, Taunggyi အတွက် ဒီနေ့အတွက် အလွန် Viral ဖြစ်မည့် Marketing Strategy တစ်ခုကို မြန်မာဘာသာဖြင့်သာ ထုတ်ပေးပါ။ 
 
     တင်းကျပ်သော လမ်းညွှန်ချက်များ:
@@ -171,7 +266,7 @@ export const generateDailyMarketingPlan = async (): Promise<DailyPlan> => {
     3. အလှူပွဲ နှင့် ဆွမ်းကပ် စျေးနှုန်းအသစ်များ (480k, 390k, 500k) ကို အသုံးပြုပါ။
     4. Pre-wedding (Limited) နှင့် Wedding/Donation (Unlimited Raw CD) ခြားနားချက်ကို မမှားစေရ။
 
-    Context: ${STUDIO_CONTEXT} ${getFeedbackContext()}`,
+    Context: ${getStudioContext()} ${getFeedbackContext()}`,
     config: {
       responseMimeType: "application/json",
       responseSchema: {
@@ -195,32 +290,88 @@ export const generateMarketingContent = async (
   description: string,
   imageUri?: string
 ): Promise<MarketingContent> => {
-  const parts: any[] = [{ text: `With You Photo Studio, Taunggyi အတွက် Viral ဖြစ်မည့် Content ကို မြန်မာဘာသာဖြင့် ရေးပေးပါ။
-    အင်္ဂလိပ်စာ လုံးဝ မသုံးရ။ စာသားအားလုံး မြန်မာလိုပဲ ရေးပါ။
+  const parts: any[] = [{ text: `You are the dedicated world-class Content Creator and Creative Director for With You Photo Studio, Taunggyi.
+
+    Role:
+    - Think like a senior Myanmar social media copywriter who understands premium photo studio customers.
+    - Think like a content strategist who understands platform behavior: Facebook needs emotional story + trust + clean paragraph structure; TikTok/Reels needs 1-3 second visual hook, short lines, replay value, and caption that feels native.
+    - Your job is not to "write a caption only". Your job is to choose the best angle, shape the emotion, protect the premium brand, and produce copy that the studio owner can post immediately.
+    - Write like a real human content writer: tasteful, warm, specific, visual, and not repetitive.
+    - Act like the studio has hired you as a monthly content creator. Use the monthly trend intelligence supplied in User Input, Facebook Insights patterns, and the brand context to make content feel timely without chasing cheap trends.
+
+    Brand writing principles:
+    - မြန်မာစာကို အဓိကသုံးပါ။ Output တစ်ခုချင်းစီမှာ မြန်မာစာ ၈၀% အနည်းဆုံးပါရမည်။ Photography/marketing terms လိုအပ်မှသာ English ညှပ်သုံးပါ (Indoor photo shoot, lighting, mood, pose, vibe, package, booking).
+    - "အိမ်တွင်းရိုက်ကူးရေး" မသုံးပါနှင့်။ "Indoor photo shoot" သို့မဟုတ် "Indoor" ဟုသုံးပါ။
+    - Premium image ကိုမကျစေပါနှင့်။ အရမ်း discount/salesy မရေးပါနှင့်။
+    - Fear-based opening များကို အလွန်မသုံးပါနှင့်။ Customer ကိုစိတ်မသက်မသာဖြစ်စေတဲ့ "အခက်အခဲ", "စိုးရိမ်", "မပေးတတ်" စကားလုံးများကို မလိုအပ်ဘဲမသုံးပါနှင့်။
+    - Same meaning ကိုနှစ်ခါမထပ်ပါနှင့်။ Opening hook တစ်ခု၊ visual detail တစ်ခု၊ emotional value တစ်ခု၊ soft CTA တစ်ခု ဆိုတဲ့ flow နဲ့ရေးပါ။
+    - Facebook caption ကို copy/paste တင်လို့ရအောင် 4-7 short paragraphs ဖြင့် သပ်သပ်ရပ်ရပ်ခွဲပါ။
+    - TikTok/Reels caption ကို long paragraph မလုပ်ပါနှင့်။ 4-7 short lines + hashtags အတွက်ရေးပါ။
+    - facebookCaption/tiktokCaption ထဲတွင် "Facebook Caption:", "TikTok Caption:", "Post Caption", markdown heading, numbered section title မထည့်ပါနှင့်။ User က တန်း copy/paste တင်နိုင်တဲ့ final caption သာထည့်ပါ။
+    - facebookVariants ထဲတွင် Facebook caption alternate ၃ ခုထည့်ပါ: Emotional Storytelling, Booking CTA, Short & Premium. တစ်ခုချင်းစီသည် final copy-ready caption ဖြစ်ရမည်။ Hashtag မထပ်ပါနှင့်။
+    - First line must be a natural hook, not a label. Keep it specific to the service/photo/context.
+    - ဈေးနှုန်းပါလာရင် POS pricing context ထဲက current package data ကိုသာအတည်ယူပါ။ မသေချာရင် price မထည့်ဘဲ "အသေးစိတ်ကို Message မှာမေးမြန်းနိုင်ပါပြီ" ဟုရေးပါ။
+    - Always include core hashtags in Facebook caption or hashtag list: #WithYouPhotoStudio #Taunggyi #wyps #taunggyiphotographer
+
+    Specialist process to follow before writing:
+    1. Identify the best content angle: emotional milestone, premium setup, client transformation, behind-the-scenes trust, or booking intent.
+    2. Choose a hook that fits the actual topic/photo, not a generic viral hook.
+    3. Mention concrete visual details if image/context provides them: dress, flowers, lighting, pose, family moment, cake, frame, studio mood.
+    4. Make the CTA soft and elegant.
+    5. Self-check the output for: paragraph breaks, brand voice, no robotic phrasing, no repetitive lines, no wrong price/package promise.
+    6. Make Facebook and TikTok outputs meaningfully different. Facebook = warm storytelling. TikTok/Reels = short, punchy, visual-first, less formal.
+    7. Use current monthly/seasonal trend brief naturally. Do not explicitly say "trend" unless it fits. The trend should influence angle, hook, and timing.
+    8. Avoid repeating the same opening pattern across outputs. If the topic is Sweet 17, Pre-wedding, Family, Donation, or Indoor portrait, create a fresh hook specific to that service.
+    9. tiktokSceneBreakdown ကို CapCut မှာ manual edit လုပ်နိုင်အောင်ရေးပါ။ Each scene should include: time range, media/shot suggestion, motion/transition idea, and optional short text overlay. Prefer Myanmar language, with only necessary editing terms like zoom, pan, beat cut, fade, text overlay.
     
     တင်းကျပ်သော လမ်းညွှန်ချက်များ:
-    1. Package စျေးနှုန်းများ (ဥပမာ- 350k, 500k စသည်) ကို ပိုစ့်ထဲတွင် လုံးဝ (လုံးဝ) မထည့်ပါနှင့်။ Content ၏ အနှစ်သာရ၊ ခံစားချက် (Emotion) နှင့် Storytelling ကိုသာ အဓိကထား ရေးသားပါ။
+    1. Package စျေးနှုန်းများကို မလိုအပ်ဘဲ မထည့်ပါနှင့်။ ပါရမယ်ဆို POS pricing context အတိုင်းသာရေးပါ။
     2. ဖတ်ရတာ ဆွဲဆောင်မှုရှိစေရန် သင့်တော်သော Emoji များ (ဥပမာ- ✨📸💖) ထည့်သွင်း အသုံးပြုပေးပါ။
     3. CTA လိုအပ်ပါက သဘာဝကျကျ soft CTA တစ်ကြောင်း ထည့်ပေးပါ။ ဥပမာ - "ခုပဲ Booking တင်လိုက်ပါ" သို့မဟုတ် "အသေးစိတ်ကို Message မှာ မေးမြန်းနိုင်ပါပြီ"။
+    4. Pain point / fear-based opening များကို အလွန်မသုံးပါနှင့်။ "pose မပေးတတ်လို့ စိတ်ပူနေလား", "အခက်အခဲ", "စိုးရိမ်" စသည့်စကားလုံးများကို လိုအပ်မှ တစ်ကြောင်းအောက်သာ သုံးပါ။
+    5. ပုံမှန် Facebook caption တစ်ပုဒ်လို သဘာဝကျကျရေးပါ။ အလှ, mood, setup, lighting, moment, service value, soft CTA ကို balance လုပ်ပါ။
+    6. တူညီတဲ့အဓိပ္ပာယ်ကို နှစ်ခါထပ်မရေးပါနှင့်။ Opening hook တစ်ခုသာသုံးပြီး caption ကိုတိုက်ရိုက်စတင်ပါ။
+    7. Output ထဲမှာ contentStrategy, captionAngle, hookOptions, qualityChecklist ကိုပါ ထည့်ပါ။ ဒါတွေက owner ကို content writer ဘယ်လိုစဉ်းစားထားလဲ သိစေရန်ဖြစ်သည်။
+    8. contentStrategy ထဲမှာ Creator Role, target audience, monthly trend influence, Facebook/TikTok split ကိုတိုတိုရှင်းရှင်းထည့်ပါ။
+    9. TikTok/Reels Blueprint သည် CapCut manual editing အတွက်ဖြစ်သည်။ Scene Breakdown ကို vague မဖြစ်စေဘဲ "0:00-0:03 - ... / Motion: ... / Text: ..." ပုံစံဖြင့် အသုံးချလို့ရအောင်ရေးပါ။
+    10. Output ကို native Myanmar social media writer တစ်ယောက်ရေးသလိုထုတ်ပါ။ Robotic translation, generic premium phrases, repeated "အိမ်မက်ဆန်ဆန်", repeated "အမှတ်တရ" များကိုလျှော့ပါ။
     
-    Context: ${STUDIO_CONTEXT} ${getFeedbackContext()}
+    Context: ${getStudioContext()} ${getFeedbackContext()}
     User Input: ${description}` }];
 
   if (imageUri) {
-    const base64Data = imageUri.split(',')[1];
+    const inlineImage = await extractInlineData(imageUri, {
+      maxDimension: 1280,
+      quality: 0.76,
+      mimeType: 'image/jpeg',
+    });
     parts.push({
-      inlineData: { mimeType: "image/jpeg", data: base64Data }
+      inlineData: inlineImage
     });
   }
 
   const response = await handleResponse(() => callGeminiProxy({
-    model: 'gemini-3-pro-preview',
+    model: 'quality',
     contents: { parts },
     config: {
       responseMimeType: "application/json",
       responseSchema: {
         type: Type.OBJECT,
         properties: {
+          contentStrategy: { type: Type.STRING },
+          captionAngle: { type: Type.STRING },
+          hookOptions: { type: Type.ARRAY, items: { type: Type.STRING } },
+          facebookVariants: {
+            type: Type.ARRAY,
+            items: {
+              type: Type.OBJECT,
+              properties: {
+                style: { type: Type.STRING },
+                caption: { type: Type.STRING }
+              },
+              required: ["style", "caption"]
+            }
+          },
           facebookCaption: { type: Type.STRING },
           tiktokVisualScript: { type: Type.STRING },
           tiktokCaption: { type: Type.STRING },
@@ -228,9 +379,10 @@ export const generateMarketingContent = async (
           tiktokEditingStyle: { type: Type.STRING },
           tiktokSceneBreakdown: { type: Type.ARRAY, items: { type: Type.STRING } },
           hashtags: { type: Type.ARRAY, items: { type: Type.STRING } },
-          engagementTips: { type: Type.STRING }
+          engagementTips: { type: Type.STRING },
+          qualityChecklist: { type: Type.ARRAY, items: { type: Type.STRING } }
         },
-        required: ["facebookCaption", "tiktokVisualScript", "tiktokCaption", "tiktokAudioStyle", "tiktokEditingStyle", "tiktokSceneBreakdown", "hashtags", "engagementTips"]
+        required: ["contentStrategy", "captionAngle", "hookOptions", "facebookVariants", "facebookCaption", "tiktokVisualScript", "tiktokCaption", "tiktokAudioStyle", "tiktokEditingStyle", "tiktokSceneBreakdown", "hashtags", "engagementTips", "qualityChecklist"]
       }
     }
   }));
@@ -244,7 +396,7 @@ export const refineMarketingText = async (
   context?: string
 ): Promise<string> => {
   const response = await handleResponse(() => callGeminiProxy({
-    model: 'gemini-3-flash-preview',
+    model: 'fast',
     contents: `Improve the following Myanmar marketing copy.
 
 Rules:
@@ -284,8 +436,8 @@ export const generateSalesScripts = async (scenario: string, customQuestion?: st
     : `Scenario: ${scenario} \n\n With You Photo Studio, Taunggyi အတွက် အကောင်းဆုံး Sales Script ကို "မြန်မာဘာသာဖြင့်သာ" ရေးပေးပါ။`;
 
   const response = await handleResponse(() => callGeminiProxy({
-    model: 'gemini-3-pro-preview',
-    contents: `Context: ${STUDIO_CONTEXT} ${getFeedbackContext()} \n\n ${prompt}`,
+    model: 'fast',
+    contents: `Context: ${getStudioContext()} ${getFeedbackContext()} \n\n ${prompt}`,
     config: {
       responseMimeType: "application/json",
       responseSchema: {
@@ -303,7 +455,7 @@ export const generateSalesScripts = async (scenario: string, customQuestion?: st
 
 export const getMarketInsights = async (): Promise<MarketTrend[]> => {
   const response = await handleResponse(() => callGeminiProxy({
-    model: 'gemini-3-flash-preview',
+    model: 'fast',
     contents: "မြန်မာနိုင်ငံရှိ မင်္ဂလာဆောင်ဓာတ်ပုံစျေးကွက် Trends ၅ ခုကို မြန်မာဘာသာဖြင့် JSON format ဖြင့် ဖော်ပြပေးပါ။",
     config: {
       responseMimeType: "application/json",
@@ -325,18 +477,18 @@ export const getMarketInsights = async (): Promise<MarketTrend[]> => {
 
 export const generateBusinessStrategy = async (goals: string): Promise<string> => {
   const response = await handleResponse(() => callGeminiProxy({
-    model: 'gemini-3-pro-preview',
-    contents: `With You Photo Studio, Taunggyi Strategy Planner. Goals: ${goals}. Studio: ${STUDIO_CONTEXT} ${getFeedbackContext()}. အစီအစဉ်အားလုံး မြန်မာဘာသာဖြင့်သာ ရေးပါ။ အင်္ဂလိပ်စာ လုံးဝ မပါရ။`,
+    model: 'quality',
+    contents: `With You Photo Studio, Taunggyi Strategy Planner. Goals: ${goals}. Studio: ${getStudioContext()} ${getFeedbackContext()}. အစီအစဉ်အားလုံး မြန်မာဘာသာဖြင့်သာ ရေးပါ။ အင်္ဂလိပ်စာ လုံးဝ မပါရ။`,
   }));
   return response.text || '';
 };
 
 export const generateHashtags = async (topic: string): Promise<{ tags: string[], strategy: string }> => {
   const response = await handleResponse(() => callGeminiProxy({
-    model: 'gemini-3-flash-preview',
+    model: 'fast',
     contents: `With You Photo Studio, Taunggyi အတွက် Hashtag Strategy ထုတ်ပေးပါ။ 
     Topic: ${topic}
-    Context: ${STUDIO_CONTEXT} ${getFeedbackContext()}
+    Context: ${getStudioContext()} ${getFeedbackContext()}
     
     လိုအပ်ချက်များ:
     1. Facebook, TikTok နှင့် Instagram အတွက် သီးသန့် Hashtags များ ခွဲခြားပေးပါ။
@@ -359,11 +511,11 @@ export const generateHashtags = async (topic: string): Promise<{ tags: string[],
 
 export const generatePortfolioBio = async (style: string, details: string): Promise<{ bio: string, tips: string }> => {
   const response = await handleResponse(() => callGeminiProxy({
-    model: 'gemini-3-flash-preview',
+    model: 'fast',
     contents: `With You Photo Studio, Taunggyi အတွက် Professional Portfolio Bio တစ်ခု ရေးပေးပါ။
     Style: ${style} (ဥပမာ- Professional, Friendly, Luxury)
     Extra Details: ${details}
-    Context: ${STUDIO_CONTEXT} ${getFeedbackContext()}
+    Context: ${getStudioContext()} ${getFeedbackContext()}
     
     လိုအပ်ချက်များ:
     1. Facebook Page Bio နှင့် Instagram Bio ၂ မျိုးလုံးအတွက် ရေးပေးပါ။
@@ -386,11 +538,11 @@ export const generatePortfolioBio = async (style: string, details: string): Prom
 
 export const generateReviewReply = async (review: string, rating: number): Promise<{ reply: string, engagementTip: string }> => {
   const response = await handleResponse(() => callGeminiProxy({
-    model: 'gemini-3-flash-preview',
+    model: 'fast',
     contents: `Client ဆီက Review တစ်ခု ရထားပါတယ်။ အဲဒါကို Professional ဆန်စွာ ပြန်လည်ဖြေကြားပေးပါ။
     Review: "${review}"
     Rating: ${rating} Stars
-    Context: ${STUDIO_CONTEXT} ${getFeedbackContext()}
+    Context: ${getStudioContext()} ${getFeedbackContext()}
     
     လိုအပ်ချက်များ:
     1. မြန်မာဘာသာဖြင့်သာ ရေးသားပါ။
@@ -413,7 +565,7 @@ export const generateReviewReply = async (review: string, rating: number): Promi
 
 export const generateSevenDayPlan = async (focusArea: string): Promise<DailyContent[]> => {
   const response = await handleResponse(() => callGeminiProxy({
-    model: 'gemini-3-pro-preview',
+    model: 'balanced',
     contents: `With You Photo Studio, Taunggyi အတွက် ၇ ရက်စာ Facebook Content Plan တစ်ခု ဆွဲပေးပါ။
     
     အရေးကြီးသော ကန့်သတ်ချက် (CRITICAL CONSTRAINT):
@@ -437,7 +589,7 @@ export const generateSevenDayPlan = async (focusArea: string): Promise<DailyCont
     5. Caption ၏ အဆုံးတွင် မဖြစ်မနေ #WithYouPhotoStudio #Taunggyi #wyps #taunggyiphotographer နှင့် အခြား သက်ဆိုင်ရာ Hashtag များ ထည့်ပေးပါ။
     
     Focus Area: ${focusArea || 'Indoor photo shoot ၏ အလှတရားနှင့် ခံစားချက်'}
-    Context: ${STUDIO_CONTEXT} ${getFeedbackContext()}`,
+    Context: ${getStudioContext()} ${getFeedbackContext()}`,
     config: {
       responseMimeType: "application/json",
       responseSchema: {
@@ -460,7 +612,7 @@ export const generateSevenDayPlan = async (focusArea: string): Promise<DailyCont
 
 export const generateEngagementPost = async (topic: string, type: string): Promise<EngagementPost> => {
   const response = await handleResponse(() => callGeminiProxy({
-    model: 'gemini-3-pro-preview',
+    model: 'balanced',
     contents: `With You Photo Studio, Taunggyi အတွက် Facebook Reach ကျနေသည်ကို ပြန်ဆယ်ရန် (Engagement/Giveaway) ပိုစ့်တစ်ခု ရေးပေးပါ။
     
     ရည်ရွယ်ချက်: Like, Comment, Share များများရရန်နှင့် Reach ပြန်တက်ရန်။
@@ -475,7 +627,7 @@ export const generateEngagementPost = async (topic: string, type: string): Promi
     5. Indoor ပုံများကိုသာ အခြေခံ၍ မည်သို့သော ပုံမျိုး တင်သင့်ကြောင်း Visual Idea ကို အကြံပြုပါ။
     6. Booking/Message CTA လိုအပ်ပါက "ခုပဲ Booking တင်လိုက်ပါ" သို့မဟုတ် "အသေးစိတ်ကို Message မှာ မေးမြန်းနိုင်ပါပြီ" ကို သဘာဝကျကျ တစ်ကြောင်းထည့်နိုင်သည်။
     
-    Context: ${STUDIO_CONTEXT} ${getFeedbackContext()}`,
+    Context: ${getStudioContext()} ${getFeedbackContext()}`,
     config: {
       responseMimeType: "application/json",
       responseSchema: {
@@ -495,7 +647,7 @@ export const generateEngagementPost = async (topic: string, type: string): Promi
 
 export const generateClientGuide = async (topic: string): Promise<ClientGuide> => {
   const response = await handleResponse(() => callGeminiProxy({
-    model: 'gemini-3.1-pro-preview',
+    model: 'quality',
     contents: `With You Photo Studio, Taunggyi အတွက် Customer များ ကြိုတင်ပြင်ဆင်နိုင်ရန် Client Preparation Guide တစ်ခု ရေးပေးပါ။
     
     ရည်ရွယ်ချက်: Premium Brand Image ကို မြှင့်တင်ရန်နှင့် Customer များ ရိုက်ကူးရေးအတွက် အကောင်းဆုံး ပြင်ဆင်လာနိုင်စေရန်။
@@ -508,7 +660,7 @@ export const generateClientGuide = async (topic: string): Promise<ClientGuide> =
     4. မြန်မာလို ရေးပါ၊ သို့သော် လိုအပ်ပါက English စကားလုံးများ (vibe, mood, lighting, props စသည်) ညှပ်သုံးပါ။
     5. မိတ်ကပ်နှင့် ဆံပင် အကြံပြုချက်များ: Customer များကို ကိုယ်တိုင် မိတ်ကပ် လုံးဝ (လုံးဝ) မလိမ်းလာရန် ယဉ်ကျေးစွာ အသိပေးပါ။ "Studio မှ Professional Makeup Artist များက အစအဆုံး ပြင်ဆင်ပေးမည်ဖြစ်၍ မျက်နှာသစ်ပြီး Skin Care အနည်းငယ်သာ လိမ်းလာရန်နှင့် ဆံပင်လျှော်ပြီး ခြောက်အောင်သာ လုပ်လာပေးရန်" ဟု သေချာထည့်ရေးပေးပါ။ (Premium ဆန်ဆန်၊ ဂရုစိုက်မှုအပြည့်ပါသော လေသံဖြင့် ရေးရန်)
     
-    Context: ${STUDIO_CONTEXT} ${getFeedbackContext()}`,
+    Context: ${getStudioContext()} ${getFeedbackContext()}`,
     config: {
       responseMimeType: "application/json",
       responseSchema: {
@@ -529,7 +681,7 @@ export const generateClientGuide = async (topic: string): Promise<ClientGuide> =
 
 export const generatePremiumPromotion = async (occasion: string): Promise<PremiumPromotion> => {
   const response = await handleResponse(() => callGeminiProxy({
-    model: 'gemini-3-pro-preview',
+    model: 'balanced',
     contents: `With You Photo Studio, Taunggyi အတွက် Premium Promotion Strategy တစ်ခု ရေးဆွဲပေးပါ။
     
     ရည်ရွယ်ချက်: Brand Image မကျစေဘဲ (ဈေးမချဘဲ) Customer ကို ဆွဲဆောင်နိုင်မည့် Value-Added Promotion ဖန်တီးရန်။
@@ -542,7 +694,7 @@ export const generatePremiumPromotion = async (occasion: string): Promise<Premiu
     4. Facebook တွင် တင်ရန် ဆွဲဆောင်မှုရှိသော Caption တစ်ခု အပါအဝင် ရေးပေးပါ။ Caption အဆုံးတွင် #WithYouPhotoStudio #Taunggyi #wyps #taunggyiphotographer ထည့်ပါ။
     5. Caption ထဲတွင် လိုအပ်ပါက "ခုပဲ Booking တင်လိုက်ပါ" သို့မဟုတ် "အသေးစိတ်ကို Message မှာ မေးမြန်းနိုင်ပါပြီ" ကို soft CTA အဖြစ် သဘာဝကျကျ ထည့်ပေးပါ။
     
-    Context: ${STUDIO_CONTEXT} ${getFeedbackContext()}`,
+    Context: ${getStudioContext()} ${getFeedbackContext()}`,
     config: {
       responseMimeType: "application/json",
       responseSchema: {
@@ -563,7 +715,7 @@ export const generatePremiumPromotion = async (occasion: string): Promise<Premiu
 
 export const generateAutoReply = async (category: string): Promise<AutoReply> => {
   const response = await handleResponse(() => callGeminiProxy({
-    model: 'gemini-3-pro-preview',
+    model: 'fast',
     contents: `With You Photo Studio, Taunggyi ၏ Facebook Messenger အတွက် Auto-Reply / FAQ စာသားများ ရေးပေးပါ။
     
     ရည်ရွယ်ချက်: Customer များ မကြာခဏ မေးလေ့ရှိသော မေးခွန်းများကို လူကိုယ်တိုင် ပြန်နေသကဲ့သို့ သဘာဝကျကျ၊ ယဉ်ကျေးစွာ ပြန်လည်ဖြေကြားပေးရန်။
@@ -572,10 +724,10 @@ export const generateAutoReply = async (category: string): Promise<AutoReply> =>
     လိုအပ်ချက်များ:
     1. "အိမ်တွင်းရိုက်ကူးရေး" ဟု လုံးဝ မသုံးပါနှင့်။ "Indoor photo shoot" ဟုသာ သုံးပါ။
     2. စကားပြောဆိုရာတွင် စက်ရုပ်ဆန်ဆန် မဟုတ်ဘဲ၊ နွေးထွေးပျူငှာသော (Friendly & Professional) လေသံဖြင့် ရေးပါ။
-    3. Package ဈေးနှုန်းများ (350k, 500k, 650k, 1M) နှင့် Limited Softcopy စည်းမျဉ်းများကို မှန်ကန်စွာ ထည့်သွင်းဖြေကြားပါ။
+    3. Package ဈေးနှုန်းများကို POS pricing context ထဲက current package list အတိုင်းသာ မှန်ကန်စွာ ဖြေကြားပါ။
     4. မေးခွန်း ၃ ခု မှ ၅ ခု အထိ ထုတ်ပေးပါ။
     
-    Context: ${STUDIO_CONTEXT} ${getFeedbackContext()}`,
+    Context: ${getStudioContext()} ${getFeedbackContext()}`,
     config: {
       responseMimeType: "application/json",
       responseSchema: {
@@ -608,7 +760,7 @@ export const generateContract = async (clientName: string, packageType: string, 
     : `\n    - ဤပွဲသည် Indoor ရိုက်ကူးရေး ဖြစ်သောကြောင့် အချိန်ပိုကြေး (Extra Time Policy) ကို စာချုပ်တွင် လုံးဝ (လုံးဝ) မထည့်ပါနှင့်။`;
 
   const response = await handleResponse(() => callGeminiProxy({
-    model: 'gemini-3.1-pro-preview',
+    model: 'quality',
     contents: `With You Photo Studio, Taunggyi အတွက် Customer နှင့် သဘောတူညီချက် စာချုပ် (Agreement / Terms & Conditions) တစ်ခု ရေးပေးပါ။
     
     Customer Name: ${clientName}
@@ -622,14 +774,14 @@ export const generateContract = async (clientName: string, packageType: string, 
     3. ငွေချေရမည့် ပုံစံ (Deposit, Full Payment) နှင့် ပုံအပ်မည့် အချိန် (Delivery Time) များကို ထည့်သွင်းပါ။
     4. အောက်ခြေတွင် Customer နှင့် Studio ဘက်မှ လက်မှတ်ထိုးရန် နေရာများ ထည့်ပေးပါ။
     
-    Context: ${STUDIO_CONTEXT}`,
+    Context: ${getStudioContext()}`,
   }));
   return response.text || '';
 };
 
 export const generateConcept = async (vibe: string): Promise<string> => {
   const response = await handleResponse(() => callGeminiProxy({
-    model: 'gemini-3.1-pro-preview',
+    model: 'quality',
     contents: `With You Photo Studio, Taunggyi အတွက် Photo Shoot Concept & Moodboard အကြံပြုချက်များ ရေးပေးပါ။
     
     Customer လိုချင်သော Vibe / Theme: ${vibe}
@@ -642,16 +794,16 @@ export const generateConcept = async (vibe: string): Promise<string> => {
     5. Photographer အတွက် အထူးသတိပြုရန် အချက်များ။
     
     မြန်မာလို ရှင်းလင်းစွာ ရေးပေးပါ။
-    Context: ${STUDIO_CONTEXT}`,
+    Context: ${getStudioContext()}`,
   }));
   return response.text || '';
 };
 
 export const generateSeasonalCampaign = async (season: string): Promise<{ title: string, ideas: string[], promotion: string }> => {
   const response = await handleResponse(() => callGeminiProxy({
-    model: 'gemini-3-flash-preview',
+    model: 'fast',
     contents: `မြန်မာနိုင်ငံ၏ ${season} ပွဲတော်အတွက် With You Photo Studio အတွက် Marketing Campaign တစ်ခု ဆွဲပေးပါ။
-    Context: ${STUDIO_CONTEXT} ${getFeedbackContext()}
+    Context: ${getStudioContext()} ${getFeedbackContext()}
     
     လိုအပ်ချက်များ:
     1. Campaign Title (မြန်မာလို)။
@@ -687,7 +839,7 @@ export const generateSpeech = async (
   } as const;
 
   const rewriteResponse = await handleResponse(() => callGeminiProxy({
-    model: 'gemini-3-flash-preview',
+    model: 'fast',
     contents: [{
       parts: [{
         text: `Rewrite this script so it sounds natural when spoken aloud in a Myanmar reel voiceover.
@@ -719,7 +871,7 @@ ${text}`
   const spokenScript = JSON.parse(rewriteResponse.text || '{"spokenScript": ""}').spokenScript?.trim() || text.trim();
 
   const response = await handleResponse(() => callGeminiProxy({
-    model: 'gemini-2.5-flash-preview-tts',
+    model: 'tts',
     contents: [{
       parts: [{
         text: `${voiceDirectives[voiceName]}
@@ -791,16 +943,18 @@ export const runMarketingAudit = async (data: string, imageBase64?: string): Pro
     Keep the tone professional, strategic, and encouraging.` }];
 
   if (imageBase64) {
+    const inlineImage = await extractInlineData(imageBase64, {
+      maxDimension: 1280,
+      quality: 0.76,
+      mimeType: 'image/jpeg',
+    });
     parts.push({
-      inlineData: {
-        mimeType: 'image/png',
-        data: imageBase64.split(',')[1] || imageBase64
-      }
+      inlineData: inlineImage
     });
   }
 
   const response = await handleResponse(() => callGeminiProxy({
-    model: 'gemini-3.1-pro-preview',
+    model: 'quality',
     contents: [{ parts }],
     config: {
       responseMimeType: 'application/json',
@@ -809,13 +963,93 @@ export const runMarketingAudit = async (data: string, imageBase64?: string): Pro
   return JSON.parse(response.text || '{"summary": "", "strengths": [], "weaknesses": [], "recommendations": []}');
 };
 
+export const generateClientReminder = async (input: {
+  clientName?: string;
+  shootDate?: string;
+  shootTime?: string;
+  packageLabel: string;
+  packageSubtitle: string;
+  dos: string[];
+  donts: string[];
+  extraNote?: string;
+  baseReminder: string;
+}): Promise<string> => {
+  const response = await handleResponse(() => callGeminiProxy({
+    model: 'fast',
+    contents: `You are the premium client-care assistant for With You Photo Studio, Taunggyi.
+
+Task: Write a NEW client reminder message from scratch in natural Burmese for Messenger/Viber/SMS.
+Do NOT rewrite or imitate a basic checklist template. Create a warmer, more thoughtful, more human message that makes the client feel carefully cared for before tomorrow's shoot.
+
+Context:
+${getStudioContext()}
+
+Client Info:
+- Client name: ${input.clientName?.trim() || 'မဖော်ပြထား'}
+- Shoot date: ${input.shootDate || 'မဖော်ပြထား'}
+- Shoot time: ${input.shootTime || 'မဖော်ပြထား'}
+- Package: ${input.packageLabel}
+- Package detail: ${input.packageSubtitle}
+- Extra note from studio: ${input.extraNote?.trim() || 'မရှိ'}
+
+Package-specific ဆောင်ရန်:
+${input.dos.map((item) => `- ${item}`).join('\n')}
+
+Package-specific ရှောင်ရန်:
+${input.donts.map((item) => `- ${item}`).join('\n')}
+
+Output style:
+- မြန်မာလို သဘာဝကျကျ၊ assistant မဟုတ်ဘဲ studio staff ကိုယ်တိုင် care လုပ်ပြီးပို့သလိုရေးပါ။
+- Premium but friendly. မချီးကျူးလွန်၊ မကြော်ငြာဆန်၊ မစက်ရုပ်ဆန်စေပါနှင့်။
+- English ကိုလိုအပ်သော photography terms များ (Indoor photo shoot, Makeup, pose, mood, lighting, outfit) လောက်သာသုံးပါ။
+- Client ကို "မနက်ဖြန် အေးအေးဆေးဆေးလာရုံပဲ" ဆိုတဲ့ စိတ်သက်သာမှုရစေပါ။
+- Checklist ကို “ဆောင်ရန် / ရှောင်ရန်” ခေါင်းစဉ်ကြီးကြီးနဲ့ မဟုတ်ဘဲ စကားပြောသဘာဝအတိုင်း, readable short lines ထဲမှာပေါင်းထည့်ပါ။
+- Package-specific dos/donts ၏ အဓိပ္ပါယ်ကို မပြောင်းပါနှင့်။ သို့သော် စာသားကိုနူးညံ့အောင်ပြန်ရေးနိုင်သည်။
+- မလိုအပ်သော promise, price, delivery term, discount, hashtags မထည့်ပါနှင့်။
+- Emoji ကို 1-3 ခုထက်မပိုပါနှင့်။
+
+Required message structure:
+1. Warm greeting with client name if available.
+2. Reminder of date/time in a soft way.
+3. Reassurance line: studio team will guide pose/mood/details carefully.
+4. Package-specific preparation notes, written like friendly care notes.
+5. Gentle avoid notes, written softly and not like warnings.
+6. Extra note if provided.
+7. Soft closing: invite questions via Message and sign off as With You Photo Studio.
+
+Quality bar:
+- It should feel noticeably better than a basic draft.
+- It should be copy-ready without needing another generator.
+- Prefer 10-18 short lines, not one long paragraph.
+- Avoid repeating the same meaning twice.
+
+Return JSON only.`,
+    config: {
+      responseMimeType: "application/json",
+      responseSchema: {
+        type: Type.OBJECT,
+        properties: {
+          message: {
+            type: Type.STRING,
+            description: "Messenger/Viber/SMS တွင် တန်းပို့နိုင်သော final client reminder message"
+          }
+        },
+        required: ["message"]
+      }
+    }
+  }));
+
+  const parsed = JSON.parse(response.text || '{}');
+  return String(parsed.message || input.baseReminder).trim();
+};
+
 export const createStrategyChat = (initialHistory: any[] = []) => {
   const history = [...initialHistory];
   
   return {
     sendMessage: async (message: string) => {
       const response = await handleResponse(() => callGeminiProxy({
-        model: 'gemini-3.1-pro-preview',
+        model: 'quality',
         contents: [
           ...history,
           { role: 'user', parts: [{ text: message }] }
@@ -826,7 +1060,7 @@ export const createStrategyChat = (initialHistory: any[] = []) => {
           Your goal is to act as a brainstorming partner, consultant, and problem solver for the studio owner.
           
           Context about the business:
-          ${STUDIO_CONTEXT}
+          ${getStudioContext()}
           
           Guidelines for your responses:
           1. Speak in natural, conversational Burmese (Myanmar language), but you can mix in English business/photography terms (e.g., marketing, brand awareness, premium, lighting, mood, tone).

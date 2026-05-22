@@ -6,6 +6,11 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: "Method Not Allowed" });
   }
 
+  const expectedSecret = process.env.WYPS_API_SECRET;
+  if (expectedSecret && req.headers["x-wyps-secret"] !== expectedSecret) {
+    return res.status(401).json({ error: "Unauthorized" });
+  }
+
   try {
     const apiKey = process.env.GEMINI_API_KEY || process.env.API_KEY;
     if (!apiKey) {

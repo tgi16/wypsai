@@ -1,9 +1,9 @@
 
-import React, { useState, useEffect, useRef, Suspense, lazy } from 'react';
+import React, { useState, useEffect, useRef, useCallback, Suspense, lazy } from 'react';
 import { AppTab } from './types';
-import { DAILY_BUDGET, MENU_GROUPS } from './constants';
+import { APP_VERSION, DAILY_BUDGET, MENU_GROUPS } from './constants';
 import Sidebar from './components/Sidebar';
-import { FirebaseProvider } from './components/FirebaseContext';
+import { FirebaseProvider, useFirebase } from './components/FirebaseContext';
 import { ErrorBoundary } from './components/ErrorBoundary';
 
 // Lazy load page components
@@ -54,8 +54,11 @@ const getUsageDayKey = () => new Date().toLocaleDateString('en-CA');
 const BUDGET_ALERT_KEY = 'wyps_budget_alert_shown';
 
 const App: React.FC = () => {
+  const { user, login, logout } = useFirebase();
   const [activeTab, setActiveTab] = useState<AppTab>(AppTab.DASHBOARD);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [mobileAuthBusy, setMobileAuthBusy] = useState(false);
+  const [mobileAuthError, setMobileAuthError] = useState('');
   const [usage, setUsage] = useState({ totalCost: 0, count: 0, lastCost: 0 });
   const [budgetToast, setBudgetToast] = useState<{ msg: string; level: 'warn' | 'danger' } | null>(null);
   const mainRef = useRef<HTMLDivElement>(null);
@@ -99,6 +102,48 @@ const App: React.FC = () => {
     return () => window.removeEventListener('gemini_usage_updated', handleUpdate);
   }, []);
 
+  useEffect(() => {
+    document.body.style.overflow = isMobileMenuOpen ? 'hidden' : '';
+    return () => {
+      document.body.style.overflow = '';
+    };
+  }, [isMobileMenuOpen]);
+
+  useEffect(() => {
+    const handleAuthError = (event: Event) => {
+      setMobileAuthError((event as CustomEvent).detail?.message || 'Google Login မအောင်မြင်သေးပါ။');
+    };
+    window.addEventListener('wyps_auth_error', handleAuthError);
+    return () => window.removeEventListener('wyps_auth_error', handleAuthError);
+  }, []);
+
+  const navigateTo = useCallback((tab: AppTab) => {
+    setActiveTab(tab);
+    setIsMobileMenuOpen(false);
+  }, []);
+
+  const handleMobileLogin = async () => {
+    if (mobileAuthBusy) return;
+    setMobileAuthError('');
+    setMobileAuthBusy(true);
+    try {
+      const signedInUser = await login();
+      if (signedInUser) setIsMobileMenuOpen(false);
+    } finally {
+      setMobileAuthBusy(false);
+    }
+  };
+
+  const handleMobileLogout = async () => {
+    if (mobileAuthBusy) return;
+    setMobileAuthBusy(true);
+    try {
+      await logout();
+    } finally {
+      setMobileAuthBusy(false);
+    }
+  };
+
   const budget = DAILY_BUDGET;
   const percentage = Math.min((usage.totalCost / budget) * 100, 100);
   const progressWidth = usage.totalCost > 0 ? Math.max(percentage, 1) : 0;
@@ -114,13 +159,13 @@ const App: React.FC = () => {
     // Adding unique keys to each component to ensure clean re-mounts
     switch (activeTab) {
       case AppTab.DASHBOARD:
-        return <Dashboard key="dashboard" onNavigate={setActiveTab} />;
+        return <Dashboard key="dashboard" onNavigate={navigateTo} />;
       case AppTab.CONTENT_GEN:
-        return <ContentGenerator key="content-gen" onNavigate={setActiveTab} />;
+        return <ContentGenerator key="content-gen" onNavigate={navigateTo} />;
       case AppTab.SALES_SCRIPTS:
         return <SalesScriptManager key="sales-scripts" />;
       case AppTab.STRATEGY:
-        return <DailyPlanPage key="daily-plan" onNavigate={setActiveTab} />;
+        return <DailyPlanPage key="daily-plan" onNavigate={navigateTo} />;
       case AppTab.PRICING:
         return <PricingGuide key="pricing" />;
       case AppTab.HASHTAGS:
@@ -142,7 +187,7 @@ const App: React.FC = () => {
       case AppTab.CLIENT_MESSAGE_CENTER:
         return <ClientMessageCenter key="client-message-center" />;
       case AppTab.POS_BOOKING_TRACKER:
-        return <PosBookingTracker key="pos-booking-tracker" onNavigate={setActiveTab} />;
+        return <PosBookingTracker key="pos-booking-tracker" onNavigate={navigateTo} />;
       case AppTab.PREMIUM_PROMOTIONS:
         return <PremiumPromotions key="premium-promotions" />;
       case AppTab.AUTO_REPLY:
@@ -156,29 +201,29 @@ const App: React.FC = () => {
       case AppTab.CONCEPT_GEN:
         return <ConceptGenerator key="concept-gen" />;
       case AppTab.SAVED_LIBRARY:
-        return <SavedLibrary key="saved-library" onNavigate={setActiveTab} />;
+        return <SavedLibrary key="saved-library" onNavigate={navigateTo} />;
       case AppTab.CLIENT_TIMELINE:
-        return <ClientTimeline key="client-timeline" onNavigate={setActiveTab} />;
+        return <ClientTimeline key="client-timeline" onNavigate={navigateTo} />;
       case AppTab.CONTENT_APPROVAL:
-        return <ContentApprovalBoard key="content-approval" onNavigate={setActiveTab} />;
+        return <ContentApprovalBoard key="content-approval" onNavigate={navigateTo} />;
       case AppTab.COMPETITOR_ANALYSIS:
         return <CompetitorAnalysis key="competitor-analysis" />;
       case AppTab.MARKETING_AUDIT:
         return <MarketingAudit key="marketing-audit" onNavigateToContent={(topic) => {
           localStorage.setItem('wyp_content_topic', topic);
-          setActiveTab(AppTab.CONTENT_GEN);
+          navigateTo(AppTab.CONTENT_GEN);
         }} />;
       case AppTab.APP_HEALTH:
         return <AppHealth key="app-health" />;
       case AppTab.TOKEN_MANAGER:
         return <TokenManager key="token-manager" />;
       default:
-        return <Dashboard key="dashboard-default" onNavigate={setActiveTab} />;
+        return <Dashboard key="dashboard-default" onNavigate={navigateTo} />;
     }
   };
 
   return (
-    <div className="flex min-h-[100dvh] flex-col overflow-hidden bg-[#0b1120] text-slate-200 font-sans md:flex-row">
+    <div className="flex h-[100dvh] min-h-[100dvh] flex-col overflow-hidden bg-[#0b1120] text-slate-200 font-sans lg:flex-row">
 
       {/* Budget Alert Toast */}
       {budgetToast && (
@@ -196,22 +241,23 @@ const App: React.FC = () => {
         </div>
       )}
       {/* Desktop Sidebar (Mac) */}
-      <div className="hidden md:block">
-        <Sidebar activeTab={activeTab} setActiveTab={setActiveTab} />
+      <div className="hidden shrink-0 lg:block">
+        <Sidebar activeTab={activeTab} setActiveTab={navigateTo} />
       </div>
 
       {/* Mobile Header */}
-      <div className="fixed inset-x-0 top-0 z-[100] border-b border-slate-800 bg-[#020617]/98 px-4 pb-3 pt-[max(0.75rem,env(safe-area-inset-top))] shadow-2xl backdrop-blur-xl md:hidden">
+      <div className="fixed inset-x-0 top-0 z-[100] border-b border-slate-800 bg-[#020617]/98 px-4 pb-3 pt-[max(0.75rem,env(safe-area-inset-top))] shadow-2xl backdrop-blur-xl lg:hidden">
         <div className="flex items-center justify-between gap-3">
           <button
             onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
             className={`h-12 w-12 shrink-0 rounded-2xl border border-slate-800 bg-slate-900/90 shadow-2xl transition-all duration-300 ${isMobileMenuOpen ? 'rotate-90 text-amber-500' : 'text-slate-300'}`}
             aria-label="Open menu"
+            aria-expanded={isMobileMenuOpen}
           >
             <span className="text-2xl">{isMobileMenuOpen ? '✕' : '☰'}</span>
           </button>
           <div className="min-w-0 flex-1">
-            <p className="text-[10px] font-black uppercase tracking-[0.25em] text-amber-500">WYPSAI</p>
+            <p className="text-[10px] font-black uppercase tracking-[0.25em] text-amber-500">WYPSAI v{APP_VERSION}</p>
             <h1 className="truncate text-sm font-black text-white burmese-text">{activeItem?.label || 'With You Studio'}</h1>
           </div>
           <div className="rounded-2xl border border-slate-800 bg-slate-900/80 px-3 py-2 text-right">
@@ -224,7 +270,7 @@ const App: React.FC = () => {
       {/* Main Content Area */}
       <main 
         ref={mainRef}
-        className="flex-1 overflow-y-auto p-3 pt-[calc(5.5rem+env(safe-area-inset-top))] pb-[calc(7.5rem+env(safe-area-inset-bottom))] scroll-smooth sm:p-4 sm:pt-[calc(5.75rem+env(safe-area-inset-top))] md:p-10 lg:p-12"
+        className="min-h-0 min-w-0 flex-1 overflow-y-auto p-3 pt-[calc(5.5rem+env(safe-area-inset-top))] pb-[calc(7.5rem+env(safe-area-inset-bottom))] scroll-smooth sm:p-4 sm:pt-[calc(5.75rem+env(safe-area-inset-top))] lg:p-10 xl:p-12"
       >
         <div className="mx-auto w-full max-w-6xl transition-all duration-300">
           <ErrorBoundary>
@@ -237,7 +283,7 @@ const App: React.FC = () => {
 
       {/* Mobile Menu Overlay */}
       {isMobileMenuOpen && (
-        <div className="fixed inset-0 z-[90] bg-[#020617] md:hidden">
+        <div className="fixed inset-0 z-[90] bg-[#020617] lg:hidden">
           <button
             type="button"
             aria-label="Close menu background"
@@ -257,6 +303,58 @@ const App: React.FC = () => {
             </div>
           </div>
           <div className="space-y-4">
+             <section aria-label="Account" className="rounded-[1.5rem] border border-slate-800 bg-slate-900/70 p-4">
+               <div className="mb-3 flex items-center justify-between gap-3">
+                 <div>
+                   <h3 className="text-xs font-black uppercase tracking-widest text-slate-300">Account</h3>
+                   <p className="mt-1 text-[10px] leading-relaxed text-slate-500 burmese-text">Mac နဲ့ mobile data တူရန် Google account တူတူဝင်ပါ။</p>
+                 </div>
+                 <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${user ? 'bg-emerald-400' : 'bg-slate-600'}`} />
+               </div>
+
+               {user ? (
+                 <div className="flex items-center gap-3 rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-3">
+                   {user.photoURL ? (
+                     <img src={user.photoURL} alt="Google account profile" className="h-10 w-10 shrink-0 rounded-full border border-emerald-400/30 object-cover" />
+                   ) : (
+                     <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-emerald-500/15 text-sm font-black text-emerald-300">
+                       {(user.displayName || user.email || 'S').charAt(0).toUpperCase()}
+                     </div>
+                   )}
+                   <div className="min-w-0 flex-1">
+                     <p className="truncate text-sm font-black text-white">{user.displayName || 'Sai Lao'}</p>
+                     <p className="truncate text-[10px] text-slate-500">{user.email}</p>
+                     <p className="mt-1 text-[9px] font-black uppercase tracking-wider text-emerald-400">Firestore Sync On</p>
+                   </div>
+                   <button
+                     type="button"
+                     onClick={() => void handleMobileLogout()}
+                     disabled={mobileAuthBusy}
+                     className="min-h-10 shrink-0 rounded-lg border border-slate-700 px-3 text-[10px] font-black text-slate-400 transition-colors hover:border-red-400/40 hover:text-red-300 disabled:opacity-50"
+                   >
+                     Logout
+                   </button>
+                 </div>
+               ) : (
+                 <div>
+                   <button
+                     type="button"
+                     onClick={() => void handleMobileLogin()}
+                     disabled={mobileAuthBusy}
+                     className="flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-amber-500 px-4 text-sm font-black text-slate-950 transition-colors hover:bg-amber-400 disabled:bg-slate-700 disabled:text-slate-400"
+                   >
+                     <span aria-hidden="true">🔑</span>
+                     {mobileAuthBusy ? 'Login ဝင်နေပါတယ်...' : 'Google ဖြင့် Login ဝင်ရန်'}
+                   </button>
+                   {mobileAuthError && (
+                     <p className="mt-2 rounded-lg border border-red-500/20 bg-red-500/10 px-3 py-2 text-[10px] font-bold leading-relaxed text-red-300 burmese-text" role="alert">
+                       {mobileAuthError}
+                     </p>
+                   )}
+                 </div>
+               )}
+             </section>
+
              {MENU_GROUPS.map(group => (
                 <section key={group.title}>
                    {group.title !== 'Main' && (
@@ -269,7 +367,7 @@ const App: React.FC = () => {
                         return (
                           <button
                             key={item.id}
-                            onClick={() => { setActiveTab(item.id); setIsMobileMenuOpen(false); }}
+                            onClick={() => navigateTo(item.id)}
                             className={`flex w-full items-center gap-3 rounded-2xl border px-3 py-3 text-left transition-all ${
                               isActive
                                 ? featured
@@ -318,7 +416,7 @@ const App: React.FC = () => {
 
       {/* Mobile Bottom Quick Nav */}
       {!isMobileMenuOpen && (
-      <div className="md:hidden fixed inset-x-3 bottom-[calc(0.75rem+env(safe-area-inset-bottom))] z-[80] rounded-[1.5rem] border border-slate-800 bg-[#020617]/95 p-2 shadow-2xl backdrop-blur-xl">
+      <div className="fixed inset-x-3 bottom-[calc(0.75rem+env(safe-area-inset-bottom))] z-[80] rounded-[1.5rem] border border-slate-800 bg-[#020617]/95 p-2 shadow-2xl backdrop-blur-xl lg:hidden">
         <div className="grid grid-cols-4 gap-1">
           {mobileQuickTabs.map((item) => {
             const isActive = activeTab === item.id;

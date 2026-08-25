@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { AppTab } from '../types';
-import { DAILY_BUDGET, MENU_GROUPS } from '../constants';
+import { APP_VERSION, DAILY_BUDGET, MENU_GROUPS } from '../constants';
 import { useFirebase } from './FirebaseContext';
 
 interface SidebarProps {
@@ -22,6 +22,14 @@ const normalizeUsage = (raw: any): UsageData => ({
 });
 
 const getUsageDayKey = () => new Date().toLocaleDateString('en-CA');
+
+const navItemClass = (isActive: boolean) =>
+  [
+    'group flex w-full items-center gap-3 rounded-2xl border p-3 text-left transition-all duration-200',
+    isActive
+      ? 'border-amber-500/40 bg-amber-500/10 text-amber-400 shadow-[0_0_18px_rgba(245,158,11,0.08)]'
+      : 'border-transparent text-slate-500 hover:border-slate-700/60 hover:bg-slate-900/50 hover:text-slate-300',
+  ].join(' ');
 
 const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab }) => {
   const { user, login, logout } = useFirebase();
@@ -49,15 +57,16 @@ const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab }) => {
   const progressWidth = usage.totalCost > 0 ? Math.max(percentage, 1) : 0;
 
   return (
-    <aside className="w-72 bg-slate-950/50 h-screen border-r border-slate-800/50 flex flex-col sticky top-0 backdrop-blur-md">
+    <aside className="h-[100dvh] max-h-[100dvh] w-72 shrink-0 overflow-y-auto border-r border-slate-800/50 bg-slate-950/50 backdrop-blur-md custom-scrollbar">
       <div className="p-10 text-left shrink-0">
         <h1 className="text-2xl font-black bg-gradient-to-r from-amber-200 via-yellow-400 to-amber-500 bg-clip-text text-transparent tracking-tighter leading-tight">
           WITH YOU<br/>STUDIO
         </h1>
         <div className="h-1 w-12 bg-amber-500 mt-2 rounded-full"></div>
+        <p className="mt-2 text-[9px] font-black uppercase tracking-widest text-slate-600">WYPSAI v{APP_VERSION}</p>
       </div>
       
-      <nav className="flex-1 px-4 space-y-6 overflow-y-auto pb-8 custom-scrollbar">
+      <nav className="space-y-6 px-4 pb-4">
         {MENU_GROUPS.map((group, index) => (
           <div key={index}>
             {group.title !== 'Main' && (
@@ -66,26 +75,37 @@ const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab }) => {
               </h3>
             )}
             <div className="space-y-1">
-              {group.items.map((item) => (
-                <button
-                  key={item.id}
-                  onClick={() => setActiveTab(item.id)}
-                  className={`w-full flex items-center p-3 rounded-2xl transition-all duration-300 group ${
-                    activeTab === item.id
-                      ? 'bg-amber-600/10 text-amber-500 border border-amber-500/20'
-                      : 'text-slate-500 hover:bg-slate-900/50 hover:text-slate-300 border border-transparent'
-                  }`}
-                >
-                  <span className={`text-xl mr-4 transition-transform group-hover:scale-110 ${activeTab === item.id ? 'opacity-100' : 'opacity-40'}`}>{item.icon}</span>
-                  <span className="font-bold text-sm burmese-text tracking-wide">{item.label}</span>
-                </button>
-              ))}
+              {group.items.map((item) => {
+                const isActive = activeTab === item.id;
+                return (
+                  <button
+                    key={item.id}
+                    onClick={() => setActiveTab(item.id)}
+                    className={navItemClass(isActive)}
+                    aria-current={isActive ? 'page' : undefined}
+                  >
+                    <span
+                      className={`text-xl shrink-0 transition-transform group-hover:scale-110 ${
+                        isActive ? 'opacity-100' : 'opacity-40'
+                      }`}
+                    >
+                      {item.icon}
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block text-sm font-bold tracking-wide burmese-text">{item.label}</span>
+                      {item.subtitle && (
+                        <span className="block text-[11px] text-slate-500 mt-0.5 burmese-text">{item.subtitle}</span>
+                      )}
+                    </span>
+                  </button>
+                );
+              })}
             </div>
           </div>
         ))}
       </nav>
       
-      <div className="p-6 border-t border-slate-900/50 shrink-0 space-y-4">
+      <div className="space-y-4 border-t border-slate-900/50 p-6">
         {/* Auth Section */}
         {!user ? (
           <button 
@@ -123,16 +143,6 @@ const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab }) => {
             <span>{percentage.toFixed(2)}%</span>
           </div>
         </div>
-
-        <a 
-          href="https://wypstudio-pos.web.app/" 
-          target="_blank" 
-          rel="noopener noreferrer"
-          className="flex items-center gap-3 p-4 bg-amber-600/5 hover:bg-amber-600/10 text-amber-500 rounded-2xl transition-all border border-amber-500/10 group"
-        >
-          <span className="text-xl group-hover:rotate-12 transition-transform">🏪</span>
-          <span className="text-xs font-black uppercase tracking-[0.2em]">POS System</span>
-        </a>
       </div>
     </aside>
   );

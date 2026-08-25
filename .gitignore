@@ -16,6 +16,7 @@ dist-ssr
 *.backup-*
 backups/
 .npm-cache/
+.vercel/
 
 # Sensitive credential files
 api_credentials.txt

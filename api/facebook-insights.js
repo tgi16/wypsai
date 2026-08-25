@@ -1,3 +1,5 @@
+import { authorizeGeminiRequest } from "../geminiGuard.js";
+
 const GRAPH_VERSION = "v19.0";
 const DEFAULT_AD_ACCOUNT_ID = process.env.FACEBOOK_INSIGHTS_AD_ACCOUNT_ID || "act_4737584856358808";
 const DEFAULT_INSIGHTS_TOKEN = process.env.FACEBOOK_INSIGHTS_ACCESS_TOKEN || "";
@@ -332,6 +334,7 @@ export default async function handler(req, res) {
   }
 
   try {
+    await authorizeGeminiRequest(req);
     const {
       pageId,
       pageToken,

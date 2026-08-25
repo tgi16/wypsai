@@ -1,28 +1,35 @@
 import React, { useState, useRef } from 'react';
 import { generateContract } from '../geminiService';
 import ReactMarkdown from 'react-markdown';
-import { saveToLibrary } from '../firebase';
+import { FALLBACK_STUDIO_PACKAGES, formatMmk, normalizeStudioPackages, POS_PACKAGE_CACHE_KEY, StudioPackage } from '../pricingCatalog';
+import { saveGeneratedHistory } from '../generatedHistory';
+import { AppTab } from '../types';
+
+const readContractPackages = (): StudioPackage[] => {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(POS_PACKAGE_CACHE_KEY) || 'null');
+    if (Array.isArray(parsed?.packages) && parsed.packages.length > 0) {
+      return normalizeStudioPackages(parsed.packages);
+    }
+  } catch {
+    // Fall back to the POS master fallback below.
+  }
+  return normalizeStudioPackages(FALLBACK_STUDIO_PACKAGES);
+};
 
 const ContractGenerator: React.FC = () => {
+  const packages = readContractPackages();
   const [clientName, setClientName] = useState('');
-  const [packageType, setPackageType] = useState('Pre-wedding (Sweet Memo - 350k)');
+  const [packageType, setPackageType] = useState(() => {
+    const firstPackage = packages[0];
+    return firstPackage ? `${firstPackage.name} - ${formatMmk(firstPackage.price)}` : '';
+  });
   const [date, setDate] = useState('');
   const [extraNotes, setExtraNotes] = useState('');
   const [loading, setLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [contract, setContract] = useState<string | null>(null);
   const printRef = useRef<HTMLDivElement>(null);
-
-  const packages = [
-    'Pre-wedding (Sweet Memo - 350k)',
-    'Pre-wedding (Style Fusion - 500k)',
-    'Pre-wedding (Elegance Duo - 650k)',
-    'Pre-wedding (Grand Royal - 1M)',
-    'မင်္ဂလာဆွမ်းကပ် (480k)',
-    'အလှူပွဲနေ့ (390k / 500k)',
-    'Family Portrait',
-    'Graduation / Solo Portrait'
-  ];
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -43,12 +50,19 @@ const ContractGenerator: React.FC = () => {
   const handleSave = async () => {
     if (!contract) return;
     setIsSaving(true);
-    const success = await saveToLibrary(`Contract - ${clientName}`, 'Contract', contract);
-    setIsSaving(false);
-    if (success) {
+    try {
+      saveGeneratedHistory({
+        type: 'Contract',
+        title: `Contract - ${clientName}`,
+        subtitle: packageType,
+        content: contract,
+        tab: AppTab.CONTRACT_GEN,
+      });
       alert('Saved Library သို့ သိမ်းဆည်းပြီးပါပြီ!');
-    } else {
+    } catch {
       alert('သိမ်းဆည်းရာတွင် အခက်အခဲရှိနေပါသည်။');
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -133,10 +147,19 @@ const ContractGenerator: React.FC = () => {
               onChange={(e) => setPackageType(e.target.value)}
               className="w-full bg-slate-950 border border-slate-800 rounded-xl p-4 text-white focus:border-amber-500 focus:ring-1 focus:ring-amber-500 outline-none"
             >
-              {packages.map(pkg => (
-                <option key={pkg} value={pkg}>{pkg}</option>
-              ))}
+              {packages.map(pkg => {
+                const label = `${pkg.name} - ${formatMmk(pkg.price)} (${pkg.category} / ${pkg.subcategory})`;
+                return (
+                  <option key={pkg.id} value={label}>{label}</option>
+                );
+              })}
+              {packages.length === 0 && (
+                <option value="">POS package မရှိသေးပါ</option>
+              )}
             </select>
+            <p className="mt-2 text-xs text-slate-500">
+              Package စျေးနှုန်းများကို Pricing tab မှ POS master data/cache အတိုင်းယူထားပါတယ်။
+            </p>
           </div>
 
           <div>

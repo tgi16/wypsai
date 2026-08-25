@@ -1,5 +1,7 @@
 import { AppTab } from './types';
 
+export const APP_VERSION = '1.3.0';
+
 export type SidebarMenuItem = {
   id: AppTab;
   label: string;
@@ -52,7 +54,7 @@ export const MENU_GROUPS: SidebarMenuGroup[] = [
     items: [
       { id: AppTab.VOICEOVER_GEN, label: 'Voiceover Generator', icon: '🎙️', subtitle: 'အသံဖိုင်ထုတ်ရန်' },
       { id: AppTab.MARKETING_AUDIT, label: 'Marketing Audit', icon: '📊', subtitle: 'Content topic ထုတ်ရန်' },
-      { id: AppTab.STRATEGY_PARTNER, label: 'Strategy Partner AI', icon: '🧠', subtitle: 'AI နဲ့ strategy ဆွေးနွေးရန်' },
+      { id: AppTab.STRATEGY_PARTNER, label: 'Strategy Partner AI', icon: '🧠', subtitle: 'General / business consultant' },
       { id: AppTab.SEVEN_DAY_PLAN, label: '7-Day Plan', icon: '📅', subtitle: 'အပတ်စဉ် content plan' },
       { id: AppTab.ENGAGEMENT_POSTS, label: 'Engagement Boost', icon: '🔥', subtitle: 'Engagement post idea' },
       { id: AppTab.SEASONAL_CAMPAIGN, label: 'Seasonal Plan', icon: '🎉', subtitle: 'ရာသီအလိုက် campaign' },

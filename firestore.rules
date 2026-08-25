@@ -48,7 +48,7 @@ service cloud.firestore {
     function isValidMessage(data) {
       return data.keys().hasOnly(['role', 'text', 'uid', 'timestamp']) &&
              data.role in ['user', 'model'] &&
-             data.text is string && data.text.size() >= 1 && data.text.size() <= 5000 &&
+             data.text is string && data.text.size() >= 1 && data.text.size() <= 30000 &&
              data.uid == request.auth.uid &&
              data.timestamp is timestamp;
     }
@@ -62,16 +62,31 @@ service cloud.firestore {
     }
 
     match /chats/{chatId} {
-      allow read, write: if isAuthenticated() && (chatId.startsWith(request.auth.uid) || isAdmin());
+      allow read: if isAuthenticated() && (chatId == request.auth.uid + "_strategy" || isAdmin());
       
       match /messages/{messageId} {
-        allow read: if isAuthenticated() && (chatId.startsWith(request.auth.uid) || isAdmin());
-        allow create: if isAuthenticated() && (chatId.startsWith(request.auth.uid) || isAdmin()) && isValidMessage(request.resource.data);
+        allow read: if isAuthenticated() && (chatId == request.auth.uid + "_strategy" || isAdmin());
+        allow create: if isAuthenticated() && chatId == request.auth.uid + "_strategy" && isValidMessage(request.resource.data);
+        allow delete: if isAuthenticated() && chatId == request.auth.uid + "_strategy" && resource.data.uid == request.auth.uid;
       }
     }
 
     match /users/{userId} {
       allow read, write: if isOwner(userId) || isAdmin();
+
+      // Personal WYPS AI Generate data. Every document lives beneath the
+      // signed-in owner's UID, so another Google account cannot read or edit it.
+      match /wyps_history/{historyId} {
+        allow read, write: if isOwner(userId);
+      }
+
+      match /wyps_approvals/{approvalId} {
+        allow read, write: if isOwner(userId);
+      }
+
+      match /wyps_settings/{settingId} {
+        allow read, write: if isOwner(userId);
+      }
     }
   }
 }

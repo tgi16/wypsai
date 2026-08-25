@@ -13,7 +13,7 @@ const CompetitorAnalysis: React.FC = () => {
     setIsLoading(true);
     try {
       const response = await handleResponse(() => callGeminiProxy({
-        model: 'gemini-3-pro-preview',
+        model: 'balanced',
         contents: `With You Photo Studio အတွက် ပြိုင်ဘက် (Competitor) ကို လေ့လာဆန်းစစ်ပေးပါ။
         
         ပြိုင်ဘက်အမည်: ${competitorName}

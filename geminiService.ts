@@ -1,7 +1,9 @@
 
-import { MarketingContent, MarketTrend, DailyPlan, SalesScript, DailyContent, EngagementPost, ClientGuide, PremiumPromotion, AutoReply } from "./types";
+import { MarketingContent, MarketTrend, DailyPlan, SalesScript, DailyContent, EngagementPost, ClientGuide, PremiumPromotion, AutoReply, ContentSceneMode } from "./types";
 import { DAILY_BUDGET, PRICING, UsageMetadata } from "./constants";
 import { getSavedPricingContext } from "./pricingCatalog";
+import { auth } from "./firebase";
+import { getAuthorizedJsonHeaders } from './apiClient';
 
 const getUsageDayKey = () => new Date().toLocaleDateString('en-CA');
 
@@ -59,17 +61,18 @@ enum Type {
 const STUDIO_CONTEXT = `
 With You Photo Studio, Taunggyi (Myanmar)
 - Brand Name: With You Photo Studio, Taunggyi
-- Focus: Premium Indoor photo shoots (Pre-wedding, Family, Solo, Birthday, etc.) & High-End Wedding/Donation Coverage.
+- Focus: Premium photo shoots and visual storytelling: Indoor studio portraits, outdoor/pre-wedding/couple shoots, family/solo/birthday portraits, and high-end wedding/donation coverage.
 - Location: Taunggyi (Hyper-local focus).
 
 [BRAND VOICE & TERMINOLOGY - CRITICAL]
-- DO NOT translate "Indoor photo shoot" to "အိမ်တွင်းရိုက်ကူးရေး". Always use the English term "Indoor photo shoot" or "Indoor".
+- DO NOT translate "Indoor photo shoot" to "အိမ်တွင်းရိုက်ကူးရေး". Use "Indoor photo shoot" or "Indoor" only when the image/topic is actually indoor.
+- If the uploaded image or topic is outdoor, use natural terms like "Outdoor photo shoot", "outdoor mood", "တောင်ကြီး view", "သဘာဝအလင်းရောင်", or the visible location/mood. Do not force Indoor wording onto outdoor photos.
 - Use natural, conversational Burmese mixed with common English photography terms (e.g., lighting, pose, mood, vibe). Avoid overly formal, stiff, or direct dictionary translations.
 - ALWAYS include these core hashtags at the end of every post/caption: #WithYouPhotoStudio #Taunggyi #wyps #taunggyiphotographer
 - When a post needs a soft booking CTA, prefer natural lines such as "ခုပဲ Booking တင်လိုက်ပါ" or "အသေးစိတ်ကို Message မှာ မေးမြန်းနိုင်ပါပြီ" instead of robotic closing lines.
 
 - Pricing / package source of truth: WYPS-POS public/js/master-data.js direction and its Firestore packages collection.
-- If price/package details are needed, use the CURRENT POS PACKAGE PRICE SOURCE appended below. Do not rely on old hardcoded price memory.
+- If a CURRENT POS PACKAGE PRICE SOURCE is provided below, use it for price/package details. If it is not provided, omit exact prices and do not rely on old hardcoded price memory.
 
 - Extra Time Policy:
   * ၃ နာရီကျော်ပါက အချိန်ပို ၃၀ မိနစ် (၃ သောင်းကျပ်)၊ ၁ နာရီ (၅ သောင်းကျပ်) ထပ်ဆောင်းပေးရမည်။
@@ -79,7 +82,10 @@ With You Photo Studio, Taunggyi (Myanmar)
 CRITICAL RULE: "With You Photo Studio" ဟူသော အမည်ကို မြန်မာလို (ဥပမာ- ဝစ်သ်ယူဓာတ်ပုံတိုက်) ဟု လုံးဝ (လုံးဝ) မဘာသာပြန်ပါနှင့်။ အင်္ဂလိပ်လိုသာ "With You Photo Studio" ဟု အမြဲတမ်း သုံးနှုန်းပါ။
 `;
 
-const getStudioContext = () => `${STUDIO_CONTEXT}\n${getSavedPricingContext()}`;
+const getStudioContext = (options: { includePricing?: boolean } = {}) => {
+  const { includePricing = true } = options;
+  return includePricing ? `${STUDIO_CONTEXT}\n${getSavedPricingContext()}` : STUDIO_CONTEXT;
+};
 
 const getFeedbackContext = () => {
   try {
@@ -168,7 +174,12 @@ const extractInlineData = async (
 /**
  * Proxy call to the server-side Gemini endpoint
  */
-export const callGeminiProxy = async (params: { model: string, contents: any, config?: any }) => {
+export const getGeminiRequestHeaders = getAuthorizedJsonHeaders;
+
+export const callGeminiProxy = async (
+  params: { model: string, contents: any, config?: any },
+  options: { signal?: AbortSignal } = {}
+) => {
   const todayUsage = getTodayUsageSnapshot();
   if ((Number(todayUsage.totalCost) || 0) >= DAILY_BUDGET) {
     const message = `ဒီနေ့ API usage budget $${DAILY_BUDGET.toFixed(2)} ပြည့်သွားပါပြီ။ မနက်ဖြန်မှ ပြန်သုံးပါ သို့မဟုတ် budget ကို ပြန်ညှိပါ။`;
@@ -179,15 +190,14 @@ export const callGeminiProxy = async (params: { model: string, contents: any, co
   const modelRoute = resolveModelRoute(params.model);
   let lastErrorMessage = '';
 
-  const requestHeaders: Record<string, string> = { "Content-Type": "application/json" };
-  const apiSecret = (import.meta as any).env?.VITE_WYPS_API_SECRET;
-  if (apiSecret) requestHeaders["x-wyps-secret"] = apiSecret;
+  const requestHeaders = await getGeminiRequestHeaders();
 
   for (const model of modelRoute) {
     const response = await fetch("/api/gemini", {
       method: "POST",
       headers: requestHeaders,
       body: JSON.stringify({ ...params, model }),
+      signal: options.signal,
     });
 
     const rawText = await response.text();
@@ -197,6 +207,13 @@ export const callGeminiProxy = async (params: { model: string, contents: any, co
       : { error: rawText || 'Unexpected server response' };
     
     if (!response.ok) {
+      if (response.status === 401) {
+        const message = auth.currentUser
+          ? 'Google Login session သက်တမ်းကုန်သွားနိုင်ပါတယ်။ Logout လုပ်ပြီး Google Login ပြန်ဝင်ပေးပါ။'
+          : 'AI ကိုအသုံးပြုရန် ဘေးဘက် menu မှ Google Login အရင်ဝင်ပေးပါ။';
+        window.dispatchEvent(new CustomEvent('wyps_app_notice', { detail: { type: 'error', message } }));
+        throw new Error(message);
+      }
       if (response.status === 413) {
         const message = 'ပို့လိုက်တဲ့ image data က အရမ်းကြီးနေပါတယ်။ Photo အရေအတွက် လျှော့ပြီး သို့မဟုတ် smaller image နဲ့ပြန်စမ်းပါ။';
         window.dispatchEvent(new CustomEvent('wyps_app_notice', { detail: { type: 'error', message } }));
@@ -233,6 +250,7 @@ export const handleResponse = async <T>(promiseFn: () => Promise<T>, retries = 3
   try {
     return await promiseFn();
   } catch (error: any) {
+    if (error?.name === 'AbortError') throw error;
     // If it's a rate limit error and we still have retries left
     if ((error.message?.includes('429') || error.status === 429) && retries > 0) {
       console.warn(`Rate limit reached. Retrying in ${backoff}ms... (${retries} retries left)`);
@@ -286,11 +304,124 @@ export const generateDailyMarketingPlan = async (): Promise<DailyPlan> => {
   return JSON.parse(response.text || '{}');
 };
 
+const MARKETING_BASE_RESPONSE_SCHEMA = {
+  type: Type.OBJECT,
+  properties: {
+    imageAnalysis: {
+      type: Type.OBJECT,
+      properties: {
+        sceneType: { type: Type.STRING },
+        confidence: { type: Type.NUMBER },
+        visibleDetails: { type: Type.ARRAY, items: { type: Type.STRING } },
+        serviceGuess: { type: Type.STRING },
+      },
+      required: ["sceneType", "confidence", "visibleDetails", "serviceGuess"],
+    },
+    facebookVariants: {
+      type: Type.ARRAY,
+      items: {
+        type: Type.OBJECT,
+        properties: {
+          style: { type: Type.STRING },
+          caption: { type: Type.STRING }
+        },
+        required: ["style", "caption"]
+      }
+    },
+    facebookCaption: { type: Type.STRING },
+    tiktokVisualScript: { type: Type.STRING },
+    tiktokCaption: { type: Type.STRING },
+    tiktokAudioStyle: { type: Type.STRING },
+    tiktokEditingStyle: { type: Type.STRING },
+    tiktokSceneBreakdown: { type: Type.ARRAY, items: { type: Type.STRING } },
+    hashtags: { type: Type.ARRAY, items: { type: Type.STRING } },
+    engagementTips: { type: Type.STRING }
+  },
+  required: ["imageAnalysis", "facebookVariants", "facebookCaption", "tiktokVisualScript", "tiktokCaption", "tiktokAudioStyle", "tiktokEditingStyle", "tiktokSceneBreakdown", "hashtags", "engagementTips"]
+};
+
+const getMarketingResponseSchema = (includeAdvanced: boolean) => includeAdvanced ? {
+  ...MARKETING_BASE_RESPONSE_SCHEMA,
+  properties: {
+    ...MARKETING_BASE_RESPONSE_SCHEMA.properties,
+    contentStrategy: { type: Type.STRING },
+    captionAngle: { type: Type.STRING },
+    hookOptions: { type: Type.ARRAY, items: { type: Type.STRING } },
+    qualityChecklist: { type: Type.ARRAY, items: { type: Type.STRING } },
+  },
+  required: [
+    ...MARKETING_BASE_RESPONSE_SCHEMA.required,
+    "contentStrategy",
+    "captionAngle",
+    "hookOptions",
+    "qualityChecklist",
+  ],
+} : MARKETING_BASE_RESPONSE_SCHEMA;
+
+const normalizeSceneType = (sceneType?: string) => {
+  const normalized = String(sceneType || '').toLowerCase();
+  if (normalized === 'indoor' || normalized === 'outdoor') return normalized;
+  return 'unknown';
+};
+
+const getMarketingCopyText = (content: MarketingContent) => [
+  content.facebookCaption,
+  content.tiktokCaption,
+  content.tiktokVisualScript,
+  ...(content.facebookVariants || []).map((variant) => variant.caption),
+  ...(content.hookOptions || []),
+].filter(Boolean).join('\n');
+
+const hasSceneMismatch = (content: MarketingContent, requiredScene: 'indoor' | 'outdoor') => {
+  const copy = getMarketingCopyText(content);
+  if (requiredScene === 'outdoor') {
+    return /\bindoor\b|studio setup|premium indoor studio/i.test(copy);
+  }
+  return /\boutdoor\b|mountain view|တောင်တန်း\s*view|balcony/i.test(copy);
+};
+
+const repairMarketingSceneMismatch = async (
+  content: MarketingContent,
+  requiredScene: 'indoor' | 'outdoor'
+): Promise<MarketingContent> => {
+  const includeAdvanced = Boolean(content.contentStrategy || content.captionAngle || content.hookOptions?.length);
+  const response = await handleResponse(() => callGeminiProxy({
+    model: 'fast',
+    contents: `You are repairing a With You Photo Studio content result whose scene wording conflicts with the required scene.
+
+Required scene: ${requiredScene.toUpperCase()}
+
+Rules:
+1. Keep the same JSON structure and the useful creative angle.
+2. Rewrite every Facebook/TikTok caption, variant, hook, and scene line so it matches the required scene.
+3. For OUTDOOR, remove Indoor, studio setup, Indoor package, and Premium Indoor Studio claims.
+4. For INDOOR, remove outdoor, balcony, mountain-view, and other unsupported outdoor claims.
+5. Use only visibleDetails from imageAnalysis. Do not invent props, location, outfit, package, or price.
+6. Keep the result natural, Myanmar-first, premium, and copy-ready.
+
+Result to repair:
+${JSON.stringify(content)}`,
+    config: {
+      responseMimeType: "application/json",
+      responseSchema: getMarketingResponseSchema(includeAdvanced),
+    }
+  }));
+
+  return JSON.parse(response.text || '{}');
+};
+
 export const generateMarketingContent = async (
   description: string,
-  imageUri?: string
+  imageUri?: string,
+  options: { sceneMode?: ContentSceneMode; includePricing?: boolean; includeAdvanced?: boolean } = {}
 ): Promise<MarketingContent> => {
-  const parts: any[] = [{ text: `You are the dedicated world-class Content Creator and Creative Director for With You Photo Studio, Taunggyi.
+  const sceneMode = options.sceneMode || 'auto';
+  const sceneInstruction = imageUri
+    ? sceneMode === 'auto'
+      ? 'AUTO: classify the uploaded image from visual evidence and follow that scene.'
+      : `MANUAL OVERRIDE: treat the content scene as ${sceneMode.toUpperCase()} even if other prompt context conflicts.`
+    : 'No uploaded image: infer the scene only from the user topic. Use unknown if unclear.';
+  const promptText = `You are the dedicated world-class Content Creator and Creative Director for With You Photo Studio, Taunggyi.
 
     Role:
     - Think like a senior Myanmar social media copywriter who understands premium photo studio customers.
@@ -300,8 +431,11 @@ export const generateMarketingContent = async (
     - Act like the studio has hired you as a monthly content creator. Use the monthly trend intelligence supplied in User Input, Facebook Insights patterns, and the brand context to make content feel timely without chasing cheap trends.
 
     Brand writing principles:
-    - မြန်မာစာကို အဓိကသုံးပါ။ Output တစ်ခုချင်းစီမှာ မြန်မာစာ ၈၀% အနည်းဆုံးပါရမည်။ Photography/marketing terms လိုအပ်မှသာ English ညှပ်သုံးပါ (Indoor photo shoot, lighting, mood, pose, vibe, package, booking).
-    - "အိမ်တွင်းရိုက်ကူးရေး" မသုံးပါနှင့်။ "Indoor photo shoot" သို့မဟုတ် "Indoor" ဟုသုံးပါ။
+    - မြန်မာစာကို အဓိကသုံးပါ။ Output တစ်ခုချင်းစီမှာ မြန်မာစာ ၈၀% အနည်းဆုံးပါရမည်။ Photography/marketing terms လိုအပ်မှသာ English ညှပ်သုံးပါ (Indoor photo shoot, Outdoor photo shoot, lighting, mood, pose, vibe, package, booking).
+    - "အိမ်တွင်းရိုက်ကူးရေး" မသုံးပါနှင့်။ Indoor ပုံ/Indoor topic ဖြစ်မှသာ "Indoor photo shoot" သို့မဟုတ် "Indoor" ဟုသုံးပါ။
+    - Uploaded image ပါလာပါက ပုံထဲကအရာသည် source of truth ဖြစ်သည်။ ပုံသည် outdoor ဖြစ်နေလျှင် Indoor, studio setup, Indoor package, Premium Indoor Studio စသည့် wording မသုံးပါနှင့်။
+    - Uploaded image ထဲတွင် တကယ်ရှင်းရှင်းလင်းလင်းမြင်ရသော location, background, subject, outfit, light, prop နှင့် mood ကိုသာ caption angle ထဲထည့်ပါ။ မမြင်ရသော detail ကို မခန့်မှန်းပါနှင့်။
+    - User Input / monthly trend / pricing context သည် uploaded image ကို override မလုပ်ရ။ ပုံနှင့်မကိုက်သော package သို့မဟုတ် location ကို မထည့်ပါနှင့်။
     - Premium image ကိုမကျစေပါနှင့်။ အရမ်း discount/salesy မရေးပါနှင့်။
     - Fear-based opening များကို အလွန်မသုံးပါနှင့်။ Customer ကိုစိတ်မသက်မသာဖြစ်စေတဲ့ "အခက်အခဲ", "စိုးရိမ်", "မပေးတတ်" စကားလုံးများကို မလိုအပ်ဘဲမသုံးပါနှင့်။
     - Same meaning ကိုနှစ်ခါမထပ်ပါနှင့်။ Opening hook တစ်ခု၊ visual detail တစ်ခု၊ emotional value တစ်ခု၊ soft CTA တစ်ခု ဆိုတဲ့ flow နဲ့ရေးပါ။
@@ -314,9 +448,10 @@ export const generateMarketingContent = async (
     - Always include core hashtags in Facebook caption or hashtag list: #WithYouPhotoStudio #Taunggyi #wyps #taunggyiphotographer
 
     Specialist process to follow before writing:
-    1. Identify the best content angle: emotional milestone, premium setup, client transformation, behind-the-scenes trust, or booking intent.
+    0. If an uploaded image is provided, first silently classify it: indoor vs outdoor, service type, visible subject, outfit, location/background, lighting, props, and mood. Use this classification in every output.
+    1. Identify the best content angle from the actual photo first: visible moment, outdoor/indoor mood, emotional milestone, premium setup, client transformation, behind-the-scenes trust, or booking intent.
     2. Choose a hook that fits the actual topic/photo, not a generic viral hook.
-    3. Mention concrete visual details if image/context provides them: dress, flowers, lighting, pose, family moment, cake, frame, studio mood.
+    3. Mention concrete visual details only when image/context clearly provides them. Never invent a location, prop, outfit, pose, event, or lighting condition. Use studio mood only for studio/indoor photos.
     4. Make the CTA soft and elegant.
     5. Self-check the output for: paragraph breaks, brand voice, no robotic phrasing, no repetitive lines, no wrong price/package promise.
     6. Make Facebook and TikTok outputs meaningfully different. Facebook = warm storytelling. TikTok/Reels = short, punchy, visual-first, less formal.
@@ -331,13 +466,21 @@ export const generateMarketingContent = async (
     4. Pain point / fear-based opening များကို အလွန်မသုံးပါနှင့်။ "pose မပေးတတ်လို့ စိတ်ပူနေလား", "အခက်အခဲ", "စိုးရိမ်" စသည့်စကားလုံးများကို လိုအပ်မှ တစ်ကြောင်းအောက်သာ သုံးပါ။
     5. ပုံမှန် Facebook caption တစ်ပုဒ်လို သဘာဝကျကျရေးပါ။ အလှ, mood, setup, lighting, moment, service value, soft CTA ကို balance လုပ်ပါ။
     6. တူညီတဲ့အဓိပ္ပာယ်ကို နှစ်ခါထပ်မရေးပါနှင့်။ Opening hook တစ်ခုသာသုံးပြီး caption ကိုတိုက်ရိုက်စတင်ပါ။
-    7. Output ထဲမှာ contentStrategy, captionAngle, hookOptions, qualityChecklist ကိုပါ ထည့်ပါ။ ဒါတွေက owner ကို content writer ဘယ်လိုစဉ်းစားထားလဲ သိစေရန်ဖြစ်သည်။
-    8. contentStrategy ထဲမှာ Creator Role, target audience, monthly trend influence, Facebook/TikTok split ကိုတိုတိုရှင်းရှင်းထည့်ပါ။
+    7. ${options.includeAdvanced
+      ? 'Advanced Writer Notes ဖွင့်ထားသောကြောင့် contentStrategy, captionAngle, hookOptions, qualityChecklist ကိုပါ ထည့်ပါ။ contentStrategy ထဲမှာ Creator Role, target audience, monthly trend influence, Facebook/TikTok split ကိုတိုတိုရှင်းရှင်းထည့်ပါ။'
+      : 'Copy-ready mode ဖြစ်သောကြောင့် final Facebook/TikTok output ကိုအဓိကထားပြီး strategy explanation, alternate hook analysis, quality checklist မထုတ်ပါနှင့်။'}
     9. TikTok/Reels Blueprint သည် CapCut manual editing အတွက်ဖြစ်သည်။ Scene Breakdown ကို vague မဖြစ်စေဘဲ "0:00-0:03 - ... / Motion: ... / Text: ..." ပုံစံဖြင့် အသုံးချလို့ရအောင်ရေးပါ။
     10. Output ကို native Myanmar social media writer တစ်ယောက်ရေးသလိုထုတ်ပါ။ Robotic translation, generic premium phrases, repeated "အိမ်မက်ဆန်ဆန်", repeated "အမှတ်တရ" များကိုလျှော့ပါ။
+    11. Uploaded image ရှိပြီး outdoor ဖြစ်ပါက facebookCaption နှင့် facebookVariants ၃ ခုလုံးတွင် Indoor/Indoor package/Indoor Studio wording မပါရပါ။ မေးထားသော topic ထဲက Indoor package အကြောင်းဖြစ်မှသာ ခြွင်းချက်ပြုပါ။
+    12. Exact package name ကို user က တိတိကျကျမရေးထားလျှင် caption ထဲတွင် "Pre Wedding Indoor 1 Dress" ကဲ့သို့ package name မခန့်မှန်းပါနှင့်။ Service level wording (ဥပမာ Pre-wedding outdoor mood, outdoor portrait, couple shoot) ကိုသာသုံးပါ။
     
-    Context: ${getStudioContext()} ${getFeedbackContext()}
-    User Input: ${description}` }];
+    Scene handling: ${sceneInstruction}
+    imageAnalysis requirements: sceneType describes the physical environment and must be indoor, outdoor, or unknown. Put wedding, birthday, donation, portrait, and other event/service guesses in serviceGuess, not sceneType. confidence must be 0-1; visibleDetails must contain only clearly visible evidence; serviceGuess must avoid invented package names.
+
+    Context: ${getStudioContext({ includePricing: options.includePricing === true })} ${getFeedbackContext()}
+    User Input: ${description}`;
+
+  const parts: any[] = [];
 
   if (imageUri) {
     const inlineImage = await extractInlineData(imageUri, {
@@ -350,44 +493,50 @@ export const generateMarketingContent = async (
     });
   }
 
+  parts.push({ text: promptText });
+
   const response = await handleResponse(() => callGeminiProxy({
     model: 'quality',
     contents: { parts },
     config: {
       responseMimeType: "application/json",
-      responseSchema: {
-        type: Type.OBJECT,
-        properties: {
-          contentStrategy: { type: Type.STRING },
-          captionAngle: { type: Type.STRING },
-          hookOptions: { type: Type.ARRAY, items: { type: Type.STRING } },
-          facebookVariants: {
-            type: Type.ARRAY,
-            items: {
-              type: Type.OBJECT,
-              properties: {
-                style: { type: Type.STRING },
-                caption: { type: Type.STRING }
-              },
-              required: ["style", "caption"]
-            }
-          },
-          facebookCaption: { type: Type.STRING },
-          tiktokVisualScript: { type: Type.STRING },
-          tiktokCaption: { type: Type.STRING },
-          tiktokAudioStyle: { type: Type.STRING },
-          tiktokEditingStyle: { type: Type.STRING },
-          tiktokSceneBreakdown: { type: Type.ARRAY, items: { type: Type.STRING } },
-          hashtags: { type: Type.ARRAY, items: { type: Type.STRING } },
-          engagementTips: { type: Type.STRING },
-          qualityChecklist: { type: Type.ARRAY, items: { type: Type.STRING } }
-        },
-        required: ["contentStrategy", "captionAngle", "hookOptions", "facebookVariants", "facebookCaption", "tiktokVisualScript", "tiktokCaption", "tiktokAudioStyle", "tiktokEditingStyle", "tiktokSceneBreakdown", "hashtags", "engagementTips", "qualityChecklist"]
-      }
+      responseSchema: getMarketingResponseSchema(options.includeAdvanced === true),
     }
   }));
 
-  return JSON.parse(response.text || '{}');
+  let content = JSON.parse(response.text || '{}') as MarketingContent;
+  if (content.imageAnalysis) {
+    content.imageAnalysis.sceneType = normalizeSceneType(content.imageAnalysis.sceneType);
+    content.imageAnalysis.confidence = Math.max(0, Math.min(1, Number(content.imageAnalysis.confidence) || 0));
+    content.imageAnalysis.visibleDetails = Array.isArray(content.imageAnalysis.visibleDetails)
+      ? content.imageAnalysis.visibleDetails.filter(Boolean).slice(0, 8)
+      : [];
+  }
+
+  const analyzedScene = normalizeSceneType(content.imageAnalysis?.sceneType);
+  const requiredScene = sceneMode === 'auto'
+    ? (analyzedScene === 'indoor' || analyzedScene === 'outdoor' ? analyzedScene : null)
+    : sceneMode;
+
+  if (requiredScene && hasSceneMismatch(content, requiredScene)) {
+    content = await repairMarketingSceneMismatch(content, requiredScene);
+    if (hasSceneMismatch(content, requiredScene)) {
+      throw new Error('ပုံရဲ့ Indoor/Outdoor scene နဲ့ caption မကိုက်သေးလို့ result ကိုမပြထားပါ။ Scene mode ကိုရွေးပြီး ပြန် Generate လုပ်ပေးပါ။');
+    }
+    content.sceneValidation = {
+      status: 'repaired',
+      message: `${requiredScene === 'outdoor' ? 'Outdoor' : 'Indoor'} scene နဲ့ကိုက်အောင် AI က caption ကို ပြန်စစ်ပြီးပြင်ထားပါတယ်။`,
+    };
+  } else {
+    content.sceneValidation = {
+      status: 'passed',
+      message: requiredScene
+        ? `${requiredScene === 'outdoor' ? 'Outdoor' : 'Indoor'} scene နဲ့ caption ကိုက်ညီပါတယ်။`
+        : 'ပုံထဲက detail မရှင်းလင်းသောကြောင့် မြင်ရတဲ့အချက်များကိုသာ သုံးထားပါတယ်။',
+    };
+  }
+
+  return content;
 };
 
 export const refineMarketingText = async (
@@ -1047,7 +1196,12 @@ export const createStrategyChat = (initialHistory: any[] = []) => {
   const history = [...initialHistory];
   
   return {
-    sendMessage: async (message: string) => {
+    sendMessage: async (message: string, options: { signal?: AbortSignal } = {}) => {
+      const today = new Date().toLocaleDateString('en-US', {
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric',
+      });
       const response = await handleResponse(() => callGeminiProxy({
         model: 'quality',
         contents: [
@@ -1055,22 +1209,45 @@ export const createStrategyChat = (initialHistory: any[] = []) => {
           { role: 'user', parts: [{ text: message }] }
         ],
         config: {
-          systemInstruction: `You are a highly experienced Business & Marketing Strategy Partner for "With You Photo Studio" located in Taunggyi, Myanmar.
-          
-          Your goal is to act as a brainstorming partner, consultant, and problem solver for the studio owner.
-          
-          Context about the business:
-          ${getStudioContext()}
-          
-          Guidelines for your responses:
-          1. Speak in natural, conversational Burmese (Myanmar language), but you can mix in English business/photography terms (e.g., marketing, brand awareness, premium, lighting, mood, tone).
-          2. Be encouraging, professional, and highly strategic.
-          3. Provide actionable advice, not just generic statements. If the user asks for a promotion idea, give specific mechanics. If they ask how to handle a difficult customer, give a specific script.
-          4. Always keep the "Premium Brand Image" in mind. Do not suggest cheap discounts that devalue the brand. Suggest value-adds instead.
-          5. Keep your responses concise and easy to read (use bullet points, emojis, and short paragraphs).
-          `,
+          systemInstruction: `You are Strategy Partner AI, a world-class general-purpose consultant for Sai Lao, owner of With You Photo Studio in Taunggyi, Myanmar.
+
+Current date: ${today}
+
+Primary mission:
+- Answer almost any practical question as helpfully as possible: business, marketing, content, sales, operations, pricing, client communication, technology, planning, writing, learning, decision-making, troubleshooting, and everyday problem solving.
+- Do not refuse a question just because it is not about the studio. Use the studio context only when it is relevant.
+- Think like a senior consultant: identify the real problem, state useful assumptions, give a direct answer, then provide practical next steps.
+
+Business context to use when relevant:
+${getStudioContext()}
+
+Response standards:
+1. Reply in natural conversational Burmese by default. Mix English terms when they are normal for business, photography, tech, marketing, or social media.
+2. Start with the useful answer first. Avoid long introductions.
+3. If the question is vague, make a reasonable assumption and say it briefly. Ask a clarifying question only when answering without it would be risky or useless.
+4. Give specific, actionable advice. Include examples, scripts, checklists, formulas, or step-by-step plans when useful.
+5. For studio/business questions, protect the premium brand image. Prefer value-adds, trust-building, better positioning, and excellent service over cheap discounting.
+6. For writing requests, produce copy-ready output the user can paste immediately.
+7. For current news, live prices, laws, policy, platform rules, or anything that may have changed recently, be transparent that you cannot browse live inside this chat and give the best stable guidance plus what to verify.
+8. For medical, legal, tax, investment, or other high-stakes questions, give general educational guidance, point out risks, and recommend a qualified professional for final decisions.
+9. Keep answers easy to scan: short paragraphs, bullets, tables, or numbered steps where helpful. Do not over-explain.
+10. If the user asks for "best", compare options and recommend one clear path with the reason.
+11. Act as a thinking partner, not a cheerleader. Challenge weak assumptions politely, point out hidden costs and operational bottlenecks, and say clearly when an idea should not be pursued.
+12. Separate facts, assumptions, and recommendations when the distinction matters. Never invent customer demand, costs, margins, competitor prices, or POS data.
+13. End substantial advice with a short "အခုဆက်လုပ်ရန်" section containing the next 1-3 actions in priority order.
+
+Package and pricing strategy protocol:
+- When Sai Lao asks to create, improve, compare, or price a package, first identify the target customer, occasion, deliverables, production time, staff/MUA/dress/print/travel costs, capacity, and desired positioning.
+- Use the CURRENT POS PACKAGE PRICE SOURCE as the source of truth for existing package names, prices, and details. Clearly label missing cost or demand data as assumptions.
+- Recommend a clear package architecture, usually Good / Better / Best or a similarly useful 3-tier structure. Each tier should have a distinct customer job and value step, not merely more deliverables.
+- For each recommendation, consider contribution margin, workload, turnaround time, upsell path, booking friction, package cannibalization, and whether the promise is operationally deliverable.
+- Show simple calculations when useful: estimated variable cost, contribution amount, contribution margin percentage, break-even bookings, or capacity impact. Do not claim a precise profit without cost data.
+- Prefer value-added differentiation such as styling, planning, experience, convenience, turnaround, print/product quality, or priority service over routine discounting.
+- Give one final recommended option, explain why it is best for WYPS now, and include a low-risk 2-4 week test with a measurable success signal.
+- If essential numbers are missing, still provide a provisional recommendation with clearly stated assumptions, then ask only the smallest set of follow-up questions needed to finalize it.
+`,
         }
-      }));
+      }, { signal: options.signal }));
 
       const text = response.text || '';
       history.push({ role: 'user', parts: [{ text: message }] });

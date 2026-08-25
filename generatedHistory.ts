@@ -10,6 +10,8 @@ export type GeneratedHistoryType =
   | 'Promotion'
   | 'Engagement'
   | '7-Day Plan'
+  | 'Contract'
+  | 'Concept'
   | 'Other';
 
 export type GeneratedHistoryItem = {
@@ -105,7 +107,7 @@ export const saveGeneratedHistory = (item: SaveInput) => {
     .filter((entry) => entry.content?.trim())
     .slice(0, 80);
   localStorage.setItem(GENERATED_HISTORY_KEY, JSON.stringify(next));
-  window.dispatchEvent(new CustomEvent('wyps_generated_history_updated', { detail: nextItem }));
+  window.dispatchEvent(new CustomEvent('wyps_generated_history_updated', { detail: { action: 'upsert', item: nextItem } }));
   return nextItem;
 };
 
@@ -215,10 +217,11 @@ export const deleteGeneratedHistory = (item: GeneratedHistoryItem) => {
   const current = safeJson<any[]>(sourceKey, []);
   const next = current.filter((entry) => String(entry.id) !== String(targetId));
   localStorage.setItem(sourceKey, JSON.stringify(next));
-  window.dispatchEvent(new CustomEvent('wyps_generated_history_updated'));
+  window.dispatchEvent(new CustomEvent('wyps_generated_history_updated', { detail: { action: 'delete', id: item.id } }));
 };
 
 export const clearGeneratedHistory = () => {
+  const cloudIds = readGeneratedHistory().map((item) => item.id);
   [
     GENERATED_HISTORY_KEY,
     'wyp_content_history',
@@ -228,5 +231,5 @@ export const clearGeneratedHistory = () => {
     'wyp_engagement_history',
     'wyp_7day_history',
   ].forEach((key) => localStorage.removeItem(key));
-  window.dispatchEvent(new CustomEvent('wyps_generated_history_updated'));
+  window.dispatchEvent(new CustomEvent('wyps_generated_history_updated', { detail: { action: 'clear', ids: cloudIds } }));
 };

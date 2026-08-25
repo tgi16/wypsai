@@ -1,4 +1,5 @@
 import React, { useMemo, useState } from 'react';
+import { getAuthorizedJsonHeaders } from '../apiClient';
 
 type TokenStatus = 'ok' | 'warn' | 'fail';
 
@@ -108,7 +109,7 @@ const TokenManager: React.FC = () => {
     try {
       const response = await fetch('/api/token-manager', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: await getAuthorizedJsonHeaders(),
         body: JSON.stringify({
           pageId: pageId.trim(),
           pageToken: pageToken.trim(),

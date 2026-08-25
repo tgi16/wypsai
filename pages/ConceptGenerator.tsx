@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import { generateConcept } from '../geminiService';
 import ReactMarkdown from 'react-markdown';
-import { saveToLibrary } from '../firebase';
+import { saveGeneratedHistory } from '../generatedHistory';
+import { AppTab } from '../types';
 
 const ConceptGenerator: React.FC = () => {
   const [vibe, setVibe] = useState('');
@@ -29,12 +30,19 @@ const ConceptGenerator: React.FC = () => {
     if (!concept) return;
     setIsSaving(true);
     const title = vibe.length > 30 ? vibe.substring(0, 30) + '...' : vibe;
-    const success = await saveToLibrary(`Concept - ${title}`, 'Concept', concept);
-    setIsSaving(false);
-    if (success) {
+    try {
+      saveGeneratedHistory({
+        type: 'Concept',
+        title: `Concept - ${title}`,
+        subtitle: 'Moodboard & Concept Generator',
+        content: concept,
+        tab: AppTab.CONCEPT_GEN,
+      });
       alert('Saved Library သို့ သိမ်းဆည်းပြီးပါပြီ!');
-    } else {
+    } catch {
       alert('သိမ်းဆည်းရာတွင် အခက်အခဲရှိနေပါသည်။');
+    } finally {
+      setIsSaving(false);
     }
   };
 

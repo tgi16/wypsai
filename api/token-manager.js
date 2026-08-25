@@ -1,3 +1,5 @@
+import { authorizeGeminiRequest } from "../geminiGuard.js";
+
 const GRAPH_VERSION = "v19.0";
 const DEFAULT_AD_ACCOUNT_ID = process.env.FACEBOOK_INSIGHTS_AD_ACCOUNT_ID || "act_4737584856358808";
 const INSIGHTS_TOKEN = process.env.FACEBOOK_INSIGHTS_ACCESS_TOKEN || "";
@@ -211,6 +213,7 @@ export default async function handler(req, res) {
   }
 
   try {
+    await authorizeGeminiRequest(req);
     const { pageId, pageToken } = await parseJsonBody(req);
     const [pagePost, insights] = await Promise.all([
       inspectPageToken({ pageId, pageToken }),
@@ -225,6 +228,6 @@ export default async function handler(req, res) {
     });
   } catch (error) {
     console.error("Token manager error:", error);
-    return res.status(500).json({ error: error?.message || "Token manager failed." });
+    return res.status(error?.status || 500).json({ error: error?.message || "Token manager failed." });
   }
 }

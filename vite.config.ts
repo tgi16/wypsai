@@ -15,6 +15,23 @@ export default defineConfig(({ mode }) => {
         VitePWA({
           registerType: 'autoUpdate',
           includeAssets: ['wyps-icon.svg'],
+          workbox: {
+            cleanupOutdatedCaches: true,
+            clientsClaim: true,
+            skipWaiting: true,
+            globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
+            navigateFallbackDenylist: [/^\/api\//],
+            runtimeCaching: [
+              {
+                urlPattern: /^https:\/\/fonts\.googleapis\.com\/.*/i,
+                handler: 'CacheFirst',
+                options: {
+                  cacheName: 'google-fonts-cache',
+                  expiration: { maxEntries: 10, maxAgeSeconds: 60 * 60 * 24 * 365 },
+                },
+              },
+            ],
+          },
           manifest: {
             name: 'WYPStudio Content AI',
             short_name: 'WYPStudio',
@@ -43,23 +60,6 @@ export default defineConfig(({ mode }) => {
                 sizes: '512x512',
                 type: 'image/png',
                 purpose: 'maskable',
-              },
-            ],
-          },
-          workbox: {
-            // Cache all static assets
-            globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
-            // Don't cache API calls
-            navigateFallbackDenylist: [/^\/api\//],
-            runtimeCaching: [
-              {
-                // Cache Google Fonts
-                urlPattern: /^https:\/\/fonts\.googleapis\.com\/.*/i,
-                handler: 'CacheFirst',
-                options: {
-                  cacheName: 'google-fonts-cache',
-                  expiration: { maxEntries: 10, maxAgeSeconds: 60 * 60 * 24 * 365 },
-                },
               },
             ],
           },

@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { AppTab } from '../types';
+import { getAuthorizedJsonHeaders } from '../apiClient';
 
 interface PosBookingTrackerProps {
   onNavigate: (tab: AppTab) => void;
@@ -283,7 +284,7 @@ const PosBookingTracker: React.FC<PosBookingTrackerProps> = ({ onNavigate }) => 
     try {
       const response = await fetch('/api/pos-bookings', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: await getAuthorizedJsonHeaders(),
         body: JSON.stringify(credentials),
       });
       const data = await response.json().catch(() => ({}));

@@ -1,3 +1,5 @@
+import { authorizeGeminiRequest } from "../geminiGuard.js";
+
 const POS_PROJECT_ID = "wypstudio-pos";
 const POS_API_KEY = process.env.POS_FIREBASE_API_KEY || "AIzaSyDj5jftTZjkzUzaCtQ-IdReic96GYmvn_Y";
 
@@ -72,6 +74,7 @@ export default async function handler(req, res) {
   }
 
   try {
+    await authorizeGeminiRequest(req);
     const { email, password, refreshToken } = req.body || {};
     if (!refreshToken && (!email || !password)) {
       return res.status(400).json({ error: "POS email/password သို့မဟုတ် saved session လိုအပ်ပါတယ်။" });
@@ -92,6 +95,6 @@ export default async function handler(req, res) {
     });
   } catch (error) {
     console.error("POS packages proxy error:", error);
-    return res.status(500).json({ error: error?.message || "Failed to load POS packages." });
+    return res.status(error?.status || 500).json({ error: error?.message || "Failed to load POS packages." });
   }
 }

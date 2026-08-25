@@ -12,6 +12,9 @@ export enum AppTab {
   SEVEN_DAY_PLAN = 'seven-day-plan',
   ENGAGEMENT_POSTS = 'engagement-posts',
   CLIENT_GUIDES = 'client-guides',
+  CLIENT_REMINDER = 'client-reminder',
+  CLIENT_MESSAGE_CENTER = 'client-message-center',
+  POS_BOOKING_TRACKER = 'pos-booking-tracker',
   PREMIUM_PROMOTIONS = 'premium-promotions',
   AUTO_REPLY = 'auto-reply',
   STRATEGY_PARTNER = 'strategy-partner',
@@ -20,7 +23,11 @@ export enum AppTab {
   SAVED_LIBRARY = 'saved-library',
   COMPETITOR_ANALYSIS = 'competitor-analysis',
   VOICEOVER_GEN = 'voiceover-gen',
-  MARKETING_AUDIT = 'marketing-audit'
+  MARKETING_AUDIT = 'marketing-audit',
+  APP_HEALTH = 'app-health',
+  TOKEN_MANAGER = 'token-manager',
+  CLIENT_TIMELINE = 'client-timeline',
+  CONTENT_APPROVAL = 'content-approval'
 }
 
 export interface EngagementPost {
@@ -61,7 +68,28 @@ export interface AutoReply {
   }[];
 }
 
+export type ContentSceneMode = 'auto' | 'indoor' | 'outdoor';
+
+export interface ContentImageAnalysis {
+  sceneType: 'indoor' | 'outdoor' | 'unknown';
+  confidence: number;
+  visibleDetails: string[];
+  serviceGuess: string;
+}
+
 export interface MarketingContent {
+  imageAnalysis?: ContentImageAnalysis;
+  sceneValidation?: {
+    status: 'passed' | 'repaired';
+    message: string;
+  };
+  contentStrategy?: string;
+  captionAngle?: string;
+  hookOptions?: string[];
+  facebookVariants?: {
+    style: string;
+    caption: string;
+  }[];
   facebookCaption: string;
   tiktokVisualScript: string;
   tiktokCaption: string;
@@ -70,6 +98,7 @@ export interface MarketingContent {
   tiktokSceneBreakdown: string[];
   hashtags: string[];
   engagementTips: string;
+  qualityChecklist?: string[];
 }
 
 export interface DailyPlan {

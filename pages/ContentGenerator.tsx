@@ -1,11 +1,12 @@
 
 import React, { useState, useEffect } from 'react';
 import { generateMarketingContent, refineMarketingText } from '../geminiService';
-import { MarketingContent, AppTab } from '../types';
+import { MarketingContent, AppTab, ContentSceneMode } from '../types';
 import Feedback from '../components/Feedback';
 import imageCompression from 'browser-image-compression';
 import { formatMarketingContent, saveGeneratedHistory } from '../generatedHistory';
 import { saveApprovalItem } from '../workflowBoard';
+import { getAuthorizedJsonHeaders } from '../apiClient';
 
 interface ContentHistory {
   id: string;
@@ -68,6 +69,7 @@ const QUICK_HINT_GROUPS = [
       'အစစာကြောင်း ပိုဆွဲဆောင်စေပါ',
       'စာပိုဒ် 4-6 ပိုဒ်နဲ့ရေးပါ',
       'စာပိုဒ်တိုတိုနဲ့ ဖတ်ရလွယ်အောင်',
+      'ပုံထဲက location/mood အတိုင်းရေးပါ',
       'Visual detail ပိုဖော်ပြပါ',
       'အရင် post နဲ့မတူအောင်ရေးပါ',
     ],
@@ -102,10 +104,19 @@ const CONTENT_TONES = [
 
 const TARGET_AUDIENCES = [
   'Pre-wedding couple',
-  'Birthday / Sweet 17',
+  'Birthday',
   'Family / Baby / Portrait',
   'Donation / Monk offering',
   'General studio customer',
+] as const;
+
+const WYPS_SERVICE_PRESETS = [
+  { id: 'prewedding', label: 'Pre-wedding', icon: '💍', audience: 'Pre-wedding couple', objective: 'Booking inquiry ရစေချင်တယ်', note: 'Pre-wedding ရိုက်ကူးရေးအတွက် couple mood, outfit, location, အမှတ်တရ story နဲ့ booking CTA ပါတဲ့ content ရေးပါ။' },
+  { id: 'graduation', label: 'Graduation', icon: '🎓', audience: 'Family / Baby / Portrait', objective: 'Recent shoot ကို showcase လုပ်ချင်တယ်', note: 'Graduation / convocation အမှတ်တရအတွက် proud family moment, achievement, portrait mood ကိုအခြေခံပြီး content ရေးပါ။' },
+  { id: 'birthday', label: 'Birthday', icon: '🎂', audience: 'Birthday / Sweet 17', objective: 'Recent shoot ကို showcase လုပ်ချင်တယ်', note: 'Birthday / Sweet 17 photo shoot အတွက် celebration mood, dress, cake, confident portrait feeling ပါတဲ့ content ရေးပါ။' },
+  { id: 'family', label: 'Family', icon: '👨‍👩‍👧', audience: 'Family / Baby / Portrait', objective: 'Brand trust တက်စေချင်တယ်', note: 'Family / baby portrait အတွက် နွေးထွေးတဲ့ family memory, togetherness, timeless photo value ကိုအခြေခံပြီး content ရေးပါ။' },
+  { id: 'portrait', label: 'Portrait', icon: '📸', audience: 'General studio customer', objective: 'Recent shoot ကို showcase လုပ်ချင်တယ်', note: 'Portrait / fashion / personal branding shoot အတွက် confident, premium, natural visual mood ပါတဲ့ content ရေးပါ။' },
+  { id: 'promotion', label: 'Promotion', icon: '✨', audience: 'General studio customer', objective: 'Booking inquiry ရစေချင်တယ်', note: 'With You Photo Studio ရဲ့ limited promotion အတွက် value ကိုရှင်းလင်းစွာပြပြီး pressure မပေးတဲ့ soft booking CTA ပါတဲ့ content ရေးပါ။' },
 ] as const;
 
 const CREATOR_MODES = [
@@ -114,6 +125,21 @@ const CREATOR_MODES = [
   'TikTok/Reels Hook Specialist',
   'Booking Conversion Copywriter',
 ] as const;
+
+const SCENE_MODES: Array<{ value: ContentSceneMode; label: string; description: string }> = [
+  { value: 'auto', label: 'Auto', description: 'ပုံကို AI စစ်မယ်' },
+  { value: 'indoor', label: 'Indoor', description: 'Indoor အဖြစ်သတ်မှတ်မယ်' },
+  { value: 'outdoor', label: 'Outdoor', description: 'Outdoor အဖြစ်သတ်မှတ်မယ်' },
+];
+
+const hasPricingIntent = (text: string) =>
+  /(price|pricing|package\s*(?:price|detail|name)?|cost|စျေး|ဈေး|နှုန်း|ဘယ်လောက်|ကုန်ကျ)/i.test(text);
+
+const getSceneLabel = (scene?: string) => {
+  if (scene === 'indoor') return 'Indoor';
+  if (scene === 'outdoor') return 'Outdoor';
+  return 'မသေချာ';
+};
 
 const getMonthlyTrendBrief = () => {
   const month = new Date().getMonth();
@@ -325,10 +351,13 @@ const ContentGenerator: React.FC<ContentGeneratorProps> = ({ onNavigate }) => {
   const [targetAudience, setTargetAudience] = useState<string>(TARGET_AUDIENCES[0]);
   const [ctaStyle, setCtaStyle] = useState('Message မှာပေါ့ပေါ့ပါးပါးမေးရန်');
   const [creatorMode, setCreatorMode] = useState<string>(CREATOR_MODES[0]);
+  const [sceneMode, setSceneMode] = useState<ContentSceneMode>('auto');
+  const [advancedOutput, setAdvancedOutput] = useState(false);
   const [monthlyTrendBrief, setMonthlyTrendBrief] = useState(getMonthlyTrendBrief());
   const [refiningAction, setRefiningAction] = useState('');
   const [editingFacebookCaption, setEditingFacebookCaption] = useState(false);
   const [facebookCaptionDraft, setFacebookCaptionDraft] = useState('');
+  const [selectedPreset, setSelectedPreset] = useState('');
   
   const [fbToken, setFbToken] = useState('');
   const [fbPageId, setFbPageId] = useState('');
@@ -373,6 +402,8 @@ const ContentGenerator: React.FC<ContentGeneratorProps> = ({ onNavigate }) => {
         if (settings.ctaStyle) setCtaStyle(settings.ctaStyle);
         if (settings.creatorMode) setCreatorMode(settings.creatorMode);
         if (settings.monthlyTrendBrief) setMonthlyTrendBrief(settings.monthlyTrendBrief);
+        if (SCENE_MODES.some((mode) => mode.value === settings.sceneMode)) setSceneMode(settings.sceneMode);
+        if (typeof settings.advancedOutput === 'boolean') setAdvancedOutput(settings.advancedOutput);
       } catch (e) {
         console.error('Failed to parse content factory settings', e);
       }
@@ -469,6 +500,21 @@ const ContentGenerator: React.FC<ContentGeneratorProps> = ({ onNavigate }) => {
     setEditingFacebookCaption(false);
   };
 
+  const clearGeneratedResult = () => {
+    setResult(null);
+    setEditingFacebookCaption(false);
+    setFacebookCaptionDraft('');
+    setRefiningAction('');
+  };
+
+  const removeImage = () => {
+    setImage(null);
+    setCompressedImageFile(null);
+    clearGeneratedResult();
+    setStatusMsg('ပုံဖယ်ထားပါတယ်။ Content အသစ်အတွက် ပြန် Generate လုပ်ပေးပါ။');
+    setTimeout(() => setStatusMsg(''), 3000);
+  };
+
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -484,6 +530,7 @@ const ContentGenerator: React.FC<ContentGeneratorProps> = ({ onNavigate }) => {
       };
       const compressedFile = await imageCompression(file, options);
       setCompressedImageFile(compressedFile);
+      clearGeneratedResult();
       
       const reader = new FileReader();
       reader.onloadend = () => setImage(reader.result as string);
@@ -540,9 +587,7 @@ const ContentGenerator: React.FC<ContentGeneratorProps> = ({ onNavigate }) => {
       const imageDataUrl = await fileToDataUrl(facebookReadyImage);
       const res = await fetch('/api/facebook-post', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: await getAuthorizedJsonHeaders(),
         body: JSON.stringify({
           pageId: fbPageId,
           pageToken: fbToken,
@@ -591,7 +636,7 @@ const ContentGenerator: React.FC<ContentGeneratorProps> = ({ onNavigate }) => {
     try {
       const response = await fetch('/api/facebook-insights', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: await getAuthorizedJsonHeaders(),
         body: JSON.stringify({
           source: 'ad_account',
           days: 30,
@@ -694,6 +739,15 @@ const ContentGenerator: React.FC<ContentGeneratorProps> = ({ onNavigate }) => {
       `Creator mode: ${creatorMode}`,
       `Monthly trend intelligence: ${monthlyTrendBrief}`,
       `CTA style: ${ctaStyle}`,
+      `Scene mode: ${sceneMode === 'auto' ? 'Auto detect from uploaded image' : sceneMode.toUpperCase() + ' manual override'}`,
+      `Output mode: ${advancedOutput ? 'Advanced writer notes and copy-ready content' : 'Copy-ready content only'}`,
+      image ? [
+        'Uploaded image instruction:',
+        '- ပုံထဲက visual evidence ကိုအဓိကအခြေခံပါ။',
+        '- ပုံက outdoor ဖြစ်လျှင် Indoor/Indoor package/studio setup wording မသုံးပါနှင့်။',
+        '- Location, background, outfit, pose, props, lighting, mood ကို caption angle ထဲထည့်ပါ။',
+        '- Package name ကိုပုံထဲကနေ မခန့်မှန်းပါနှင့်။ user notes ထဲမှာတိတိကျကျပါမှသာ package name သုံးပါ။',
+      ].join('\n') : '',
       selectedHints.length ? `Extra directions:\n- ${selectedHints.join('\n- ')}` : '',
       [
         'Copy-ready output rules:',
@@ -703,6 +757,7 @@ const ContentGenerator: React.FC<ContentGeneratorProps> = ({ onNavigate }) => {
         '- CTA သည် soft ဖြစ်ရမည်။ “ခုပဲ Booking တင်လိုက်ပါ” ကို aggressive မဖြစ်အောင်လိုအပ်မှသာသုံးပါ။',
         '- TikTok caption သည် 4-7 short lines ဖြစ်ပြီး hashtags မထပ်ပါစေနှင့်။',
         '- Facebook alternate versions ၃ ခုထုတ်ပါ: Emotional Storytelling / Booking CTA / Short & Premium.',
+        '- Uploaded image ပါလျှင် alternate versions ၃ ခုလုံးသည် ပုံထဲက location/mood/service နဲ့ကိုက်ရမည်။',
         '- Same idea ကိုနှစ်ကြိမ်မထပ်ရေးပါနှင့်။',
       ].join('\n'),
       `Raw topic / notes:\n${rawNotes || fallbackTopic}`,
@@ -715,6 +770,8 @@ const ContentGenerator: React.FC<ContentGeneratorProps> = ({ onNavigate }) => {
       ctaStyle,
       creatorMode,
       monthlyTrendBrief,
+      sceneMode,
+      advancedOutput,
     }));
 
     return brief;
@@ -747,7 +804,16 @@ const ContentGenerator: React.FC<ContentGeneratorProps> = ({ onNavigate }) => {
     setErrorMsg('');
     setStatusMsg('Caption နဲ့ TikTok plan ကို generate လုပ်နေပါသည်...');
     try {
-      const data = await generateMarketingContent(buildGenerationPrompt(effectiveDescription || autoTopic), image || undefined);
+      const pricingSourceText = [effectiveDescription, ...selectedHints].filter(Boolean).join(' ');
+      const data = await generateMarketingContent(
+        buildGenerationPrompt(effectiveDescription || autoTopic),
+        image || undefined,
+        {
+          sceneMode,
+          includePricing: hasPricingIntent(pricingSourceText),
+          includeAdvanced: advancedOutput,
+        }
+      );
       const formattedData = normalizeMarketingContent(data);
       setResult(formattedData);
       setFacebookCaptionDraft(formattedData.facebookCaption);
@@ -788,6 +854,36 @@ const ContentGenerator: React.FC<ContentGeneratorProps> = ({ onNavigate }) => {
     navigator.clipboard.writeText(text);
     setToastMsg(`${label} ကို ကူးယူပြီးပါပြီ!`);
     setTimeout(() => setToastMsg(''), 3000);
+  };
+
+  const applyServicePreset = (preset: typeof WYPS_SERVICE_PRESETS[number]) => {
+    setSelectedPreset(preset.id);
+    setTargetAudience(preset.audience);
+    setContentObjective(preset.objective);
+    setDescription((current) => current.trim() ? `${preset.note}\n\n${current}` : preset.note);
+    clearGeneratedResult();
+  };
+
+  const sendToPhotoshop = (content: MarketingContent) => {
+    const prompt = [
+      'WYPS Photoshop AI handoff',
+      `Service: ${WYPS_SERVICE_PRESETS.find((preset) => preset.id === selectedPreset)?.label || 'Studio content'}`,
+      `Visual direction: ${content.captionAngle || description || 'Use the supplied reference image and keep the subject natural.'}`,
+      image ? 'Reference image: uploaded in Content Factory. Preserve the client identity, pose, and important outfit details.' : 'Reference image: none supplied.',
+      'Editing goal: premium studio finish, natural skin texture, realistic lighting, clean composition. Do not change the person’s identity or add text/logo unless requested.',
+      `Facebook caption context: ${content.facebookCaption.slice(0, 500)}`,
+    ].join('\n\n');
+    localStorage.setItem('wyps_photoshop_ai_prompt', prompt);
+    void navigator.clipboard.writeText(prompt);
+    setToastMsg('Photoshop AI prompt ကို copy + handoff အဖြစ်သိမ်းပြီးပါပြီ။ Photoshop panel ထဲမှာ Paste လုပ်ပါ။');
+    setTimeout(() => setToastMsg(''), 4000);
+  };
+
+  const sendToClientReminder = (content: MarketingContent) => {
+    localStorage.setItem('wyps_client_reminder_prefill', JSON.stringify({
+      extraNote: `Content follow-up context:\n${content.facebookCaption}`,
+    }));
+    onNavigate?.(AppTab.CLIENT_REMINDER);
   };
 
   const goToVoiceover = (script: string) => {
@@ -898,6 +994,28 @@ const ContentGenerator: React.FC<ContentGeneratorProps> = ({ onNavigate }) => {
                 <p className="mt-2 text-xs leading-relaxed text-slate-300">
                   ကမ္ဘာကျော် Content Creator တစ်ယောက်လို studio context, monthly trend, Facebook/TikTok behavior, booking intent ကိုစဉ်းစားပြီး copy-ready output ထုတ်ပေးပါမယ်။
                 </p>
+              </div>
+
+              <div className="mb-5">
+                <div className="mb-2 flex items-center justify-between gap-3">
+                  <label className="text-[9px] font-black uppercase tracking-widest text-slate-500">WYPS Service Preset</label>
+                  <span className="text-[9px] text-slate-600">ရွေးပြီး topic ကိုလိုသလိုထပ်ရေးနိုင်ပါတယ်</span>
+                </div>
+                <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                  {WYPS_SERVICE_PRESETS.map((preset) => {
+                    const active = selectedPreset === preset.id;
+                    return (
+                      <button
+                        key={preset.id}
+                        type="button"
+                        onClick={() => applyServicePreset(preset)}
+                        className={`rounded-xl border px-3 py-3 text-left text-[10px] font-black transition-colors ${active ? 'border-amber-400 bg-amber-500 text-slate-950' : 'border-slate-800 bg-slate-950 text-slate-300 hover:border-amber-500/50'}`}
+                      >
+                        <span className="mr-1.5">{preset.icon}</span>{preset.label}
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-5">
@@ -1019,6 +1137,66 @@ const ContentGenerator: React.FC<ContentGeneratorProps> = ({ onNavigate }) => {
             </div>
 
             <div className="mb-8">
+              <label className="mb-4 flex min-h-14 cursor-pointer items-center justify-between gap-4 rounded-xl border border-slate-800 bg-slate-950/60 px-4 py-3">
+                <span className="min-w-0">
+                  <span className="block text-xs font-black text-slate-200">Advanced Writer Notes</span>
+                  <span className="mt-1 block text-[10px] text-slate-500">Strategy, extra hooks, quality check</span>
+                </span>
+                <span className="relative inline-flex h-6 w-11 shrink-0 items-center">
+                  <input
+                    type="checkbox"
+                    className="peer sr-only"
+                    checked={advancedOutput}
+                    onChange={(event) => {
+                      setAdvancedOutput(event.target.checked);
+                      clearGeneratedResult();
+                      setStatusMsg('Output mode ပြောင်းထားပါတယ်။ Content ကို ပြန် Generate လုပ်ပေးပါ။');
+                      setTimeout(() => setStatusMsg(''), 3000);
+                    }}
+                    aria-label="Advanced Writer Notes"
+                  />
+                  <span className="absolute inset-0 rounded-full bg-slate-700 transition-colors peer-checked:bg-amber-500" />
+                  <span className="relative ml-1 h-4 w-4 rounded-full bg-white shadow transition-transform peer-checked:translate-x-5" />
+                </span>
+              </label>
+
+              <div className="mb-4">
+                <div className="mb-3 flex items-center justify-between gap-3">
+                  <label className="text-[10px] font-black text-slate-500 uppercase tracking-[0.2em]">Scene Mode</label>
+                  <span className="text-[9px] font-bold text-slate-600">ပုံနဲ့ caption ကိုက်ညီမှု</span>
+                </div>
+                <div className="grid grid-cols-3 overflow-hidden rounded-xl border border-slate-800 bg-slate-950 p-1" role="group" aria-label="Content scene mode">
+                  {SCENE_MODES.map((mode) => {
+                    const active = sceneMode === mode.value;
+                    return (
+                      <button
+                        key={mode.value}
+                        type="button"
+                        title={mode.description}
+                        aria-pressed={active}
+                        onClick={() => {
+                          if (sceneMode === mode.value) return;
+                          setSceneMode(mode.value);
+                          clearGeneratedResult();
+                          setStatusMsg('Scene mode ပြောင်းထားပါတယ်။ Content ကို ပြန် Generate လုပ်ပေးပါ။');
+                          setTimeout(() => setStatusMsg(''), 3000);
+                        }}
+                        className={`min-h-10 px-2 text-[10px] font-black transition-colors ${
+                          active
+                            ? 'rounded-lg bg-amber-500 text-slate-950'
+                            : 'text-slate-500 hover:text-slate-200'
+                        }`}
+                      >
+                        {mode.label}
+                      </button>
+                    );
+                  })}
+                </div>
+                <p className="mt-2 text-[10px] leading-relaxed text-slate-500">
+                  Auto က ပုံကိုစစ်ပြီးရွေးပါမယ်။ AI မသေချာနိုင်တဲ့ပုံဆို Indoor သို့ Outdoor ကို ကိုယ်တိုင်သတ်မှတ်နိုင်ပါတယ်။
+                </p>
+              </div>
+
               <label className="text-[10px] font-black text-slate-500 uppercase tracking-[0.2em] block mb-3">ကိုးကားပုံ (Auto-compressed)</label>
               {!image ? (
                 <label className="w-full h-32 border-2 border-dashed border-slate-800 rounded-2xl flex flex-col items-center justify-center cursor-pointer hover:bg-slate-800/50 transition-all group relative">
@@ -1036,9 +1214,9 @@ const ContentGenerator: React.FC<ContentGeneratorProps> = ({ onNavigate }) => {
                   )}
                 </label>
               ) : (
-                <div className="relative rounded-2xl overflow-hidden border border-amber-500/20 shadow-2xl">
-                  <img src={image} className="w-full h-48 object-cover" />
-                  <button onClick={() => { setImage(null); setCompressedImageFile(null); }} className="absolute top-2 right-2 bg-red-500/80 hover:bg-red-600 text-white w-8 h-8 rounded-full flex items-center justify-center transition-all">✕</button>
+                <div className="relative overflow-hidden rounded-2xl border border-amber-500/20 bg-slate-950 shadow-2xl">
+                  <img src={image} alt="Content အတွက်တင်ထားသော ကိုးကားပုံ" className="h-56 w-full object-contain" />
+                  <button type="button" aria-label="ကိုးကားပုံဖယ်ရန်" title="ပုံဖယ်ရန်" onClick={removeImage} className="absolute right-2 top-2 flex h-8 w-8 items-center justify-center rounded-full bg-red-500/90 text-white transition-colors hover:bg-red-600">✕</button>
                 </div>
               )}
             </div>
@@ -1223,6 +1401,23 @@ const ContentGenerator: React.FC<ContentGeneratorProps> = ({ onNavigate }) => {
 
           {result && (
             <div className="space-y-8 animate-in slide-in-from-bottom-8 duration-500">
+              {result.imageAnalysis && (
+                <div className="flex flex-wrap items-center gap-3 rounded-xl border border-sky-500/20 bg-sky-500/10 px-4 py-3">
+                  <span className="text-[10px] font-black uppercase tracking-[0.16em] text-sky-300">Image Check</span>
+                  <span className="rounded-lg border border-sky-400/25 bg-slate-950/60 px-2.5 py-1 text-xs font-black text-white">
+                    {getSceneLabel(result.imageAnalysis.sceneType)}
+                  </span>
+                  <span className="text-xs text-slate-400">
+                    ယုံကြည်မှု {Math.round(result.imageAnalysis.confidence * 100)}%
+                  </span>
+                  <span className="min-w-0 flex-1 text-xs text-slate-300">
+                    {result.imageAnalysis.visibleDetails.slice(0, 4).join(' · ') || result.imageAnalysis.serviceGuess}
+                  </span>
+                  {result.sceneValidation?.status === 'repaired' && (
+                    <span className="text-[10px] font-bold text-emerald-300">Auto-repaired</span>
+                  )}
+                </div>
+              )}
               {(result.contentStrategy || result.captionAngle || result.hookOptions?.length) && (
                 <div className="bg-gradient-to-br from-amber-500/10 via-slate-900/60 to-slate-950 border border-amber-500/20 rounded-[2rem] p-6 md:p-8">
                   <div className="flex items-center gap-3 mb-5">
@@ -1423,6 +1618,22 @@ const ContentGenerator: React.FC<ContentGeneratorProps> = ({ onNavigate }) => {
                        : fbScheduleTime
                          ? "⏰ SCHEDULE FACEBOOK"
                          : "🚀 POST TO FACEBOOK"}
+                   </button>
+                 </div>
+                 <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
+                   <button
+                    type="button"
+                    onClick={() => sendToPhotoshop(result)}
+                    className="rounded-xl border border-fuchsia-400/30 bg-fuchsia-500/10 px-4 py-3 text-xs font-black text-fuchsia-200 hover:bg-fuchsia-500/20"
+                   >
+                     ✨ PHOTOSHOP AI PROMPT
+                   </button>
+                   <button
+                    type="button"
+                    onClick={() => sendToClientReminder(result)}
+                    className="rounded-xl border border-emerald-400/30 bg-emerald-500/10 px-4 py-3 text-xs font-black text-emerald-200 hover:bg-emerald-500/20"
+                   >
+                     💬 REMINDER PREFILL
                    </button>
                  </div>
                  {!compressedImageFile && (

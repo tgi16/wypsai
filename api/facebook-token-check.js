@@ -1,3 +1,5 @@
+import { authorizeGeminiRequest } from "../geminiGuard.js";
+
 const GRAPH_VERSION = "v19.0";
 
 const parseJsonBody = async (req) => {
@@ -24,6 +26,7 @@ export default async function handler(req, res) {
   }
 
   try {
+    await authorizeGeminiRequest(req);
     const { pageId, pageToken } = await parseJsonBody(req);
     if (!pageId || !pageToken) {
       return res.status(400).json({ error: "Page ID နဲ့ Page Access Token လိုအပ်ပါတယ်။" });
@@ -50,6 +53,6 @@ export default async function handler(req, res) {
     });
   } catch (error) {
     console.error("Facebook token check error:", error);
-    return res.status(500).json({ error: error?.message || "Facebook token check failed." });
+    return res.status(error?.status || 500).json({ error: error?.message || "Facebook token check failed." });
   }
 }

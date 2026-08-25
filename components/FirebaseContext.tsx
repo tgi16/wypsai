@@ -2,6 +2,7 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { User, onAuthStateChanged } from 'firebase/auth';
 import { auth, loginWithGoogle, logout } from '../firebase';
+import FirestoreSync from './FirestoreSync';
 
 interface FirebaseContextType {
   user: User | null;
@@ -33,6 +34,7 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
   return (
     <FirebaseContext.Provider value={value}>
+      <FirestoreSync user={user} />
       {!loading && children}
     </FirebaseContext.Provider>
   );

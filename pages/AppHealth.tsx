@@ -1,5 +1,7 @@
 import React, { useMemo, useState } from 'react';
+import { getGeminiRequestHeaders } from '../geminiService';
 import { POS_SESSION_KEY } from '../pricingCatalog';
+import { getAuthorizedJsonHeaders } from '../apiClient';
 
 type CheckStatus = 'idle' | 'checking' | 'ok' | 'warn' | 'fail';
 
@@ -114,9 +116,9 @@ const AppHealth: React.FC = () => {
     try {
       const { response, latencyMs } = await timedFetch('/api/gemini', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: await getGeminiRequestHeaders(),
         body: JSON.stringify({
-          model: 'gemini-3-flash-preview',
+          model: 'gemini-2.5-flash',
           contents: { parts: [{ text: 'Reply OK only.' }] },
         }),
       });
@@ -124,7 +126,11 @@ const AppHealth: React.FC = () => {
       patchItem('gemini', {
         status: response.ok && !data.error ? 'ok' : 'fail',
         detail: response.ok && !data.error ? `AI backend OK. ${latencyMs}ms` : (data.error || `Status ${response.status}`),
-        action: response.ok && !data.error ? '' : 'Gemini API key/Vercel backend route ကိုစစ်ရန်လိုပါတယ်။',
+        action: response.ok && !data.error
+          ? ''
+          : response.status === 401
+            ? 'ဘေးဘက် menu မှ owner Google Login ဝင်ပြီး ပြန်စစ်ပါ။'
+            : 'Gemini API key/Vercel backend route ကိုစစ်ရန်လိုပါတယ်။',
         latencyMs,
       });
     } catch (error) {
@@ -138,7 +144,7 @@ const AppHealth: React.FC = () => {
     try {
       const { response, latencyMs } = await timedFetch('/api/facebook-insights', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: await getAuthorizedJsonHeaders(),
         body: JSON.stringify({ source: 'ad_account', days: 30, limit: 3 }),
       });
       const data = await response.json().catch(() => ({}));
@@ -171,7 +177,7 @@ const AppHealth: React.FC = () => {
       try {
         const { response, latencyMs } = await timedFetch('/api/facebook-token-check', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: await getAuthorizedJsonHeaders(),
           body: JSON.stringify({ pageId: fbPageId, pageToken: fbPageToken }),
         });
         const data = await response.json().catch(() => ({}));

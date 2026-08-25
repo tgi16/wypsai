@@ -27,9 +27,9 @@ const safeJson = <T,>(key: string, fallback: T): T => {
   }
 };
 
-const saveItems = (items: ApprovalItem[]) => {
+const saveItems = (items: ApprovalItem[], detail: Record<string, unknown> = {}) => {
   localStorage.setItem(CONTENT_APPROVAL_KEY, JSON.stringify(items.slice(0, 100)));
-  window.dispatchEvent(new CustomEvent('wyps_content_board_updated'));
+  window.dispatchEvent(new CustomEvent('wyps_content_board_updated', { detail }));
 };
 
 export const readApprovalItems = () => safeJson<ApprovalItem[]>(CONTENT_APPROVAL_KEY, []);
@@ -44,7 +44,7 @@ export const saveApprovalItem = (input: Omit<ApprovalItem, 'id' | 'status' | 'cr
     createdAt: now,
     updatedAt: now,
   };
-  saveItems([nextItem, ...current.filter((item) => item.id !== nextItem.id)]);
+  saveItems([nextItem, ...current.filter((item) => item.id !== nextItem.id)], { action: 'upsert', item: nextItem });
   return nextItem;
 };
 
@@ -52,11 +52,12 @@ export const updateApprovalStatus = (id: string, status: ApprovalStatus) => {
   const next = readApprovalItems().map((item) => (
     item.id === id ? { ...item, status, updatedAt: new Date().toLocaleString() } : item
   ));
-  saveItems(next);
+  const item = next.find((entry) => entry.id === id);
+  saveItems(next, item ? { action: 'upsert', item } : {});
 };
 
 export const deleteApprovalItem = (id: string) => {
-  saveItems(readApprovalItems().filter((item) => item.id !== id));
+  saveItems(readApprovalItems().filter((item) => item.id !== id), { action: 'delete', id });
 };
 
 export const reuseApprovalItem = (item: ApprovalItem) => {

@@ -2,6 +2,7 @@
 import { MarketingContent, MarketTrend, DailyPlan, SalesScript, DailyContent, EngagementPost, ClientGuide, PremiumPromotion, AutoReply, ContentSceneMode } from "./types";
 import { DAILY_BUDGET, PRICING, UsageMetadata } from "./constants";
 import { getSavedPricingContext } from "./pricingCatalog";
+import { buildBusinessBrainSnapshot } from "./businessBrain";
 import { auth } from "./firebase";
 import { getAuthorizedJsonHeaders } from './apiClient';
 
@@ -415,6 +416,7 @@ export const generateMarketingContent = async (
   imageUri?: string,
   options: { sceneMode?: ContentSceneMode; includePricing?: boolean; includeAdvanced?: boolean } = {}
 ): Promise<MarketingContent> => {
+  const businessBrain = buildBusinessBrainSnapshot('content');
   const sceneMode = options.sceneMode || 'auto';
   const sceneInstruction = imageUri
     ? sceneMode === 'auto'
@@ -477,6 +479,14 @@ export const generateMarketingContent = async (
     Scene handling: ${sceneInstruction}
     imageAnalysis requirements: sceneType describes the physical environment and must be indoor, outdoor, or unknown. Put wedding, birthday, donation, portrait, and other event/service guesses in serviceGuess, not sceneType. confidence must be 0-1; visibleDetails must contain only clearly visible evidence; serviceGuess must avoid invented package names.
 
+    WYPS Business Brain instructions:
+    - Use the current operations/content signals below when they improve timing, angle, or conversion relevance.
+    - The uploaded image and explicit user notes remain the source of truth for visible scene and service.
+    - Do not force a popular topic or package onto an unrelated image.
+    - Do not repeat any recent opening listed in the snapshot. Create a materially fresh first line.
+    - Never expose client names or operational details in public-facing copy.
+    ${businessBrain.context}
+
     Context: ${getStudioContext({ includePricing: options.includePricing === true })} ${getFeedbackContext()}
     User Input: ${description}`;
 
@@ -535,6 +545,30 @@ export const generateMarketingContent = async (
         : 'ပုံထဲက detail မရှင်းလင်းသောကြောင့် မြင်ရတဲ့အချက်များကိုသာ သုံးထားပါတယ်။',
     };
   }
+
+  const combinedTags = (content.hashtags || []).map((tag) => String(tag).replace(/^#/, '').toLowerCase());
+  const paragraphs = String(content.facebookCaption || '').split(/\n\s*\n/).filter((item) => item.trim());
+  const checks = [
+    paragraphs.length >= 4 ? 'Facebook caption has readable short paragraphs' : 'Facebook paragraph structure needs review',
+    content.facebookVariants?.length === 3 ? 'Three Facebook angles are ready' : 'Facebook alternate angles need review',
+    ['withyouphotostudio', 'taunggyi', 'wyps', 'taunggyiphotographer'].every((tag) => combinedTags.includes(tag))
+      ? 'Core WYPS hashtags are present'
+      : 'Core hashtags should be checked before publishing',
+    imageUri && content.imageAnalysis?.visibleDetails?.length
+      ? 'Caption is grounded in uploaded-image evidence'
+      : imageUri ? 'Uploaded-image evidence needs review' : 'No image was supplied; topic brief is the source of truth',
+    requiredScene && !hasSceneMismatch(content, requiredScene)
+      ? 'Indoor/outdoor wording matches the scene'
+      : requiredScene ? 'Scene wording needs review' : 'Scene was not asserted without evidence',
+  ];
+  const passedChecks = checks.filter((check) => !/needs review|should be checked/i.test(check)).length;
+  content.businessGrounding = {
+    score: Math.round((passedChecks / checks.length) * 100),
+    sourceCount: businessBrain.sourceCount,
+    totalSources: businessBrain.totalSources,
+    signalsUsed: businessBrain.contentSignals.slice(0, 3),
+    checks,
+  };
 
   return content;
 };
@@ -1192,7 +1226,7 @@ Return JSON only.`,
   return String(parsed.message || input.baseReminder).trim();
 };
 
-export const createStrategyChat = (initialHistory: any[] = []) => {
+export const createStrategyChat = (initialHistory: any[] = [], businessContext = '') => {
   const history = [...initialHistory];
   
   return {
@@ -1221,6 +1255,9 @@ Primary mission:
 Business context to use when relevant:
 ${getStudioContext()}
 
+Live WYPS Business Brain snapshot:
+${businessContext || 'No fresh Business Brain snapshot is available. Treat operational data as unknown.'}
+
 Response standards:
 1. Reply in natural conversational Burmese by default. Mix English terms when they are normal for business, photography, tech, marketing, or social media.
 2. Start with the useful answer first. Avoid long introductions.
@@ -1235,6 +1272,9 @@ Response standards:
 11. Act as a thinking partner, not a cheerleader. Challenge weak assumptions politely, point out hidden costs and operational bottlenecks, and say clearly when an idea should not be pursued.
 12. Separate facts, assumptions, and recommendations when the distinction matters. Never invent customer demand, costs, margins, competitor prices, or POS data.
 13. End substantial advice with a short "အခုဆက်လုပ်ရန်" section containing the next 1-3 actions in priority order.
+14. For WYPS questions, use the Business Brain snapshot as the latest operational evidence. Mention which observed signal drives the recommendation. If a source is missing or stale, say so and do not silently treat it as zero.
+15. Never reveal client phone numbers, private notes, access tokens, refresh tokens, account IDs, or internal authentication details. Do not put client-specific operational data into public copy.
+16. For strategy work, connect advice to one measurable outcome such as booking inquiries, conversion, contribution margin, turnaround time, content completion, or follow-up completion. Recommend a small test before a major irreversible change.
 
 Package and pricing strategy protocol:
 - When Sai Lao asks to create, improve, compare, or price a package, first identify the target customer, occasion, deliverables, production time, staff/MUA/dress/print/travel costs, capacity, and desired positioning.

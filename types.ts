@@ -99,6 +99,13 @@ export interface MarketingContent {
   hashtags: string[];
   engagementTips: string;
   qualityChecklist?: string[];
+  businessGrounding?: {
+    score: number;
+    sourceCount: number;
+    totalSources: number;
+    signalsUsed: string[];
+    checks: string[];
+  };
 }
 
 export interface DailyPlan {

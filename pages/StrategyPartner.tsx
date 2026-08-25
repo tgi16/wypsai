@@ -19,6 +19,7 @@ import {
 } from 'firebase/firestore';
 import { db } from '../firebase';
 import { useFirebase } from '../components/FirebaseContext';
+import { buildBusinessBrainSnapshot } from '../businessBrain';
 
 interface Message {
   id: string;
@@ -33,6 +34,9 @@ const defaultGreeting: Message = {
 };
 
 const QUICK_ACTIONS = [
+  { label: 'Today Priorities', prompt: 'WYPS Business Brain ထဲက လက်ရှိ data ကိုအခြေခံပြီး ဒီနေ့ အရေးကြီးဆုံးလုပ်ရမယ့် အလုပ် ၃ ခုကို priority, reason, expected outcome နဲ့ပေးပါ။' },
+  { label: 'Booking Risk', prompt: 'WYPS Business Brain ထဲက booking, reminder, balance, overdue data ကိုစစ်ပြီး အခုချက်ချင်းကိုင်တွယ်ရမယ့် risk နဲ့ action plan ပေးပါ။' },
+  { label: 'Content Gap', prompt: 'WYPS Business Brain ထဲက recent posts, approval pipeline, Facebook insights ကိုသုံးပြီး အခုလိုနေတဲ့ content angle နဲ့ ဒီနေ့ရေးသင့်တဲ့ post brief ကိုပေးပါ။' },
   { label: 'Best Answer', prompt: 'ဒီမေးခွန်းကို အကောင်းဆုံးဖြေပေးပါ။ အရင်ဆုံး တိုက်ရိုက်အဖြေ၊ ပြီးရင် လက်တွေ့လုပ်ရမယ့် steps နဲ့ example ပေးပါ။ မေးခွန်း - ' },
   { label: 'Decision Help', prompt: 'အောက်ကအခြေအနေမှာ ဘယ် option ကိုရွေးသင့်လဲ၊ pros/cons နဲ့ final recommendation ပေးပါ။ အခြေအနေ - ' },
   { label: 'Package Strategy', prompt: 'WYPS အတွက် ဒီ package ကို ပိုကောင်းအောင်ဆွဲပေးပါ။ Target customer, 3-tier structure, deliverables, estimated cost/margin assumptions, upsell, cannibalization risk, final recommendation နဲ့ 2-4 week test plan ပါစေ။ လက်ရှိအချက်အလက် - ' },
@@ -86,6 +90,7 @@ const StrategyPartner: React.FC = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [isInitializing, setIsInitializing] = useState(true);
   const [cancelNotice, setCancelNotice] = useState('');
+  const [brain, setBrain] = useState(() => buildBusinessBrainSnapshot('strategy'));
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const activeRequestRef = useRef<{ controller: AbortController; message: Message } | null>(null);
 
@@ -167,6 +172,20 @@ const StrategyPartner: React.FC = () => {
     activeRequestRef.current?.controller.abort();
   }, []);
 
+  useEffect(() => {
+    const refreshBrain = () => setBrain(buildBusinessBrainSnapshot('strategy'));
+    window.addEventListener('storage', refreshBrain);
+    window.addEventListener('wyps_generated_history_updated', refreshBrain);
+    window.addEventListener('wyps_content_board_updated', refreshBrain);
+    window.addEventListener('gemini_usage_updated', refreshBrain);
+    return () => {
+      window.removeEventListener('storage', refreshBrain);
+      window.removeEventListener('wyps_generated_history_updated', refreshBrain);
+      window.removeEventListener('wyps_content_board_updated', refreshBrain);
+      window.removeEventListener('gemini_usage_updated', refreshBrain);
+    };
+  }, []);
+
   const handleAction = (prompt: string) => {
     setInput(prompt);
   };
@@ -222,7 +241,9 @@ const StrategyPartner: React.FC = () => {
         role: message.role,
         parts: [{ text: message.content }],
       }));
-      const chatSession = createStrategyChat(history);
+      const freshBrain = buildBusinessBrainSnapshot('strategy');
+      setBrain(freshBrain);
+      const chatSession = createStrategyChat(history, freshBrain.context);
       if (user) {
         await setDoc(doc(chatMessagesFor(user.uid), newUserMsg.id), {
           role: newUserMsg.role,
@@ -286,7 +307,12 @@ const StrategyPartner: React.FC = () => {
           </div>
           <div>
             <h2 className="text-xl font-black text-white">Strategy Partner AI</h2>
-            <p className="text-amber-500 text-xs font-bold tracking-widest uppercase">General + Studio Consultant</p>
+            <div className="mt-1 flex flex-wrap items-center gap-2">
+              <p className="text-amber-500 text-xs font-bold uppercase tracking-widest">General + Studio Consultant</p>
+              <span className="rounded-full border border-emerald-500/25 bg-emerald-500/10 px-2 py-0.5 text-[9px] font-black uppercase tracking-wider text-emerald-300">
+                Business Brain {brain.sourceCount}/{brain.totalSources}
+              </span>
+            </div>
           </div>
         </div>
         <button 

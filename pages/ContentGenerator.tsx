@@ -7,6 +7,7 @@ import imageCompression from 'browser-image-compression';
 import { formatMarketingContent, saveGeneratedHistory } from '../generatedHistory';
 import { saveApprovalItem } from '../workflowBoard';
 import { getAuthorizedJsonHeaders } from '../apiClient';
+import { buildBusinessBrainSnapshot } from '../businessBrain';
 
 interface ContentHistory {
   id: string;
@@ -369,6 +370,7 @@ const ContentGenerator: React.FC<ContentGeneratorProps> = ({ onNavigate }) => {
 
   const [history, setHistory] = useState<ContentHistory[]>([]);
   const [showHistory, setShowHistory] = useState(false);
+  const [brain, setBrain] = useState(() => buildBusinessBrainSnapshot('content'));
 
   useEffect(() => {
     const savedToken = localStorage.getItem('fb_page_token');
@@ -424,6 +426,18 @@ const ContentGenerator: React.FC<ContentGeneratorProps> = ({ onNavigate }) => {
         console.error('Failed to parse history', e);
       }
     }
+  }, []);
+
+  useEffect(() => {
+    const refreshBrain = () => setBrain(buildBusinessBrainSnapshot('content'));
+    window.addEventListener('storage', refreshBrain);
+    window.addEventListener('wyps_generated_history_updated', refreshBrain);
+    window.addEventListener('wyps_content_board_updated', refreshBrain);
+    return () => {
+      window.removeEventListener('storage', refreshBrain);
+      window.removeEventListener('wyps_generated_history_updated', refreshBrain);
+      window.removeEventListener('wyps_content_board_updated', refreshBrain);
+    };
   }, []);
 
   // Auto-save draft: debounce 800ms so we don't thrash localStorage on every keystroke
@@ -815,6 +829,7 @@ const ContentGenerator: React.FC<ContentGeneratorProps> = ({ onNavigate }) => {
         }
       );
       const formattedData = normalizeMarketingContent(data);
+      setBrain(buildBusinessBrainSnapshot('content'));
       setResult(formattedData);
       setFacebookCaptionDraft(formattedData.facebookCaption);
       localStorage.removeItem('wyp_content_draft');
@@ -938,7 +953,12 @@ const ContentGenerator: React.FC<ContentGeneratorProps> = ({ onNavigate }) => {
       <header className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <h1 className="text-3xl md:text-5xl font-black text-white">Content <span className="text-amber-500">Factory</span></h1>
-          <p className="text-slate-400 font-medium mt-1">Specialist Content Writer ပုံစံနဲ့ caption, hook, TikTok plan ကိုတစ်ခါတည်းရေးပေးရန်</p>
+          <div className="mt-2 flex flex-wrap items-center gap-2">
+            <p className="text-slate-400 font-medium">Specialist Content Writer ပုံစံနဲ့ caption, hook, TikTok plan ကိုတစ်ခါတည်းရေးပေးရန်</p>
+            <span className="rounded-full border border-emerald-500/25 bg-emerald-500/10 px-2 py-1 text-[9px] font-black uppercase tracking-wider text-emerald-300">
+              Business Brain {brain.sourceCount}/{brain.totalSources}
+            </span>
+          </div>
         </div>
         <button 
           onClick={() => setShowHistory(!showHistory)}
@@ -1090,6 +1110,27 @@ const ContentGenerator: React.FC<ContentGeneratorProps> = ({ onNavigate }) => {
                 placeholder="ဥပမာ- ဒီနေ့ ရိုက်ထားတဲ့ Sweet 17 / Pre-wedding / Family shoot အကြောင်း, ပုံထဲက mood, outfit, location, client note..."
                 className="w-full h-40 bg-slate-950 border border-slate-800 rounded-2xl p-5 focus:ring-2 focus:ring-amber-500 outline-none transition-all text-sm leading-relaxed text-slate-200 resize-none"
               />
+              <div className="mt-3 rounded-2xl border border-emerald-500/20 bg-emerald-500/5 p-3">
+                <div className="mb-2 flex items-center justify-between gap-3">
+                  <span className="text-[9px] font-black uppercase tracking-[0.2em] text-emerald-300">Brain Suggestions</span>
+                  <span className="text-[9px] text-slate-500">လက်ရှိ data အပေါ်အခြေခံထားသည်</span>
+                </div>
+                <div className="space-y-2">
+                  {brain.suggestions.map((suggestion, index) => (
+                    <button
+                      key={`${suggestion}-${index}`}
+                      type="button"
+                      onClick={() => {
+                        setDescription(suggestion);
+                        setContentObjective(index === 0 ? 'Booking inquiry ရစေချင်တယ်' : contentObjective);
+                      }}
+                      className="block w-full rounded-xl border border-slate-800 bg-slate-950/70 px-3 py-2 text-left text-[10px] font-bold leading-relaxed text-slate-300 transition-colors hover:border-emerald-500/40 hover:text-white"
+                    >
+                      {suggestion}
+                    </button>
+                  ))}
+                </div>
+              </div>
             </div>
 
             <div className="mb-6">
@@ -1401,6 +1442,20 @@ const ContentGenerator: React.FC<ContentGeneratorProps> = ({ onNavigate }) => {
 
           {result && (
             <div className="space-y-8 animate-in slide-in-from-bottom-8 duration-500">
+              {result.businessGrounding && (
+                <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/10 px-4 py-3">
+                  <div className="flex flex-wrap items-center gap-3">
+                    <span className="text-[10px] font-black uppercase tracking-[0.16em] text-emerald-300">Post Quality</span>
+                    <span className="rounded-lg bg-slate-950/70 px-2.5 py-1 text-sm font-black text-white">{result.businessGrounding.score}%</span>
+                    <span className="text-xs text-slate-400">Business sources {result.businessGrounding.sourceCount}/{result.businessGrounding.totalSources}</span>
+                  </div>
+                  <div className="mt-3 grid grid-cols-1 gap-1 sm:grid-cols-2">
+                    {result.businessGrounding.checks.map((check) => (
+                      <div key={check} className="text-[10px] leading-relaxed text-slate-300">{check}</div>
+                    ))}
+                  </div>
+                </div>
+              )}
               {result.imageAnalysis && (
                 <div className="flex flex-wrap items-center gap-3 rounded-xl border border-sky-500/20 bg-sky-500/10 px-4 py-3">
                   <span className="text-[10px] font-black uppercase tracking-[0.16em] text-sky-300">Image Check</span>

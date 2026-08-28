@@ -41,6 +41,7 @@ import { AppTab } from '../types';
 
 const BOOK_TYPES: Array<{ value: StoryBookType; label: string; note: string }> = [
   { value: 'visual-concept', label: 'Visual Concept', note: 'Shoot mood, look, lighting, poses' },
+  { value: 'shoot-sketch', label: 'B&W Shoot Sketch', note: 'မရိုက်ခင် Pose / Shot / Camera / Light storyboard' },
   { value: 'client-presentation', label: 'Client Book', note: 'Client ကိုပြမယ့် concept proposal' },
   { value: 'social-carousel', label: 'Social Story', note: 'Carousel / Story progression' },
   { value: 'strategy-book', label: 'Strategy Book', note: 'Idea ကို visual action plan ပြောင်းရန်' },
@@ -69,32 +70,33 @@ const projectId = () => `story-${Date.now()}-${Math.random().toString(36).slice(
 
 const StoryPage: React.FC<{ page: StoryBookPage; project: StoryBookProject; exportMode?: boolean }> = ({ page, project, exportMode }) => {
   const image = pageImage(page);
+  const isShootSketch = project.bookType === 'shoot-sketch';
   return (
-    <article className={`${exportMode ? 'h-[1000px] w-[800px]' : 'aspect-[4/5] w-full'} relative overflow-hidden bg-[#080d19] text-white`}>
-      <div className="absolute inset-x-0 top-0 h-[64%] overflow-hidden bg-slate-900">
+    <article className={`${exportMode ? 'h-[1000px] w-[800px]' : 'aspect-[4/5] w-full'} relative overflow-hidden ${isShootSketch ? 'bg-[#f5f3ed] text-slate-950' : 'bg-[#080d19] text-white'}`}>
+      <div className={`absolute inset-x-0 top-0 h-[64%] overflow-hidden ${isShootSketch ? 'bg-white' : 'bg-slate-900'}`}>
         {image ? (
           <img src={image} crossOrigin="anonymous" alt="Story page visual" className="h-full w-full object-cover" />
         ) : (
-          <div className="flex h-full flex-col items-center justify-center gap-3 bg-[linear-gradient(135deg,#101827,#1f2937,#35200b)] px-8 text-center">
-            <ImagePlus className="h-10 w-10 text-amber-400/70" aria-hidden="true" />
-            <p className="text-xs font-black uppercase text-amber-300">Rough visual pending</p>
-            <p className="max-w-sm text-xs leading-relaxed text-slate-400">{page.visualPrompt}</p>
+          <div className={`flex h-full flex-col items-center justify-center gap-3 px-8 text-center ${isShootSketch ? 'bg-white' : 'bg-[linear-gradient(135deg,#101827,#1f2937,#35200b)]'}`}>
+            <ImagePlus className={`h-10 w-10 ${isShootSketch ? 'text-slate-500' : 'text-amber-400/70'}`} aria-hidden="true" />
+            <p className={`text-xs font-black uppercase ${isShootSketch ? 'text-slate-800' : 'text-amber-300'}`}>Rough visual pending</p>
+            <p className={`max-w-sm text-xs leading-relaxed ${isShootSketch ? 'text-slate-500' : 'text-slate-400'}`}>{page.visualPrompt}</p>
           </div>
         )}
-        <div className="absolute inset-0 bg-gradient-to-t from-[#080d19] via-transparent to-black/15" />
-        <div className="absolute left-5 top-5 rounded-md border border-white/20 bg-black/45 px-3 py-2 text-[10px] font-black uppercase tracking-[0.2em] backdrop-blur-md">
+        <div className={`absolute inset-0 ${isShootSketch ? 'bg-gradient-to-t from-[#f5f3ed] via-transparent to-transparent' : 'bg-gradient-to-t from-[#080d19] via-transparent to-black/15'}`} />
+        <div className={`absolute left-5 top-5 rounded-md border px-3 py-2 text-[10px] font-black uppercase tracking-[0.2em] backdrop-blur-md ${isShootSketch ? 'border-slate-400 bg-white/80 text-slate-900' : 'border-white/20 bg-black/45'}`}>
           WITH YOU STUDIO
         </div>
       </div>
-      <div className="absolute inset-x-0 bottom-0 h-[42%] bg-[#080d19] px-[7%] pb-[6%] pt-[5%]">
+      <div className={`absolute inset-x-0 bottom-0 h-[42%] px-[7%] pb-[6%] pt-[5%] ${isShootSketch ? 'bg-[#f5f3ed]' : 'bg-[#080d19]'}`}>
         <div className="mb-3 flex items-center gap-3">
-          <span className="text-[10px] font-black uppercase tracking-[0.25em] text-amber-400">{String(page.order + 1).padStart(2, '0')}</span>
-          <span className="h-px flex-1 bg-amber-400/30" />
-          <span className="text-[9px] font-bold uppercase tracking-widest text-slate-500">{project.visualStyle}</span>
+          <span className={`text-[10px] font-black uppercase tracking-[0.25em] ${isShootSketch ? 'text-slate-900' : 'text-amber-400'}`}>{String(page.order + 1).padStart(2, '0')}</span>
+          <span className={`h-px flex-1 ${isShootSketch ? 'bg-slate-400' : 'bg-amber-400/30'}`} />
+          <span className="text-[9px] font-bold uppercase tracking-widest text-slate-500">{project.bookType === 'shoot-sketch' ? 'B&W shoot sketch' : project.visualStyle}</span>
         </div>
         <h2 className={`${exportMode ? 'text-4xl' : 'text-[clamp(1.05rem,3vw,2rem)]'} font-black leading-tight`}>{page.title}</h2>
-        <p className={`${exportMode ? 'mt-5 text-xl' : 'mt-3 text-[clamp(0.65rem,1.7vw,1rem)]'} burmese-text whitespace-pre-wrap leading-relaxed text-slate-300`}>{page.narrative}</p>
-        {page.shotNote && <p className={`${exportMode ? 'mt-5 text-base' : 'mt-3 text-[clamp(0.55rem,1.4vw,0.8rem)]'} line-clamp-2 border-l-2 border-amber-400/60 pl-3 font-bold leading-relaxed text-amber-100/70`}>{page.shotNote}</p>}
+        <p className={`${exportMode ? 'mt-5 text-xl' : 'mt-3 text-[clamp(0.65rem,1.7vw,1rem)]'} burmese-text whitespace-pre-wrap leading-relaxed ${isShootSketch ? 'text-slate-700' : 'text-slate-300'}`}>{page.narrative}</p>
+        {page.shotNote && <p className={`${exportMode ? 'mt-5 text-base' : 'mt-3 text-[clamp(0.55rem,1.4vw,0.8rem)]'} line-clamp-2 border-l-2 pl-3 font-bold leading-relaxed ${isShootSketch ? 'border-slate-600 text-slate-700' : 'border-amber-400/60 text-amber-100/70'}`}>{page.shotNote}</p>}
       </div>
     </article>
   );
@@ -213,7 +215,7 @@ const StoryBookStudio: React.FC = () => {
       pages: currentProject.pages.map((item) => item.id === page.id ? { ...item, imageStatus: 'generating', imageError: '' } : item),
     });
     try {
-      const generated = await generateStoryBookImage(page, currentProject.styleBible, reference, { signal: controller.signal });
+      const generated = await generateStoryBookImage(page, currentProject.styleBible, currentProject.bookType, reference, { signal: controller.signal });
       return {
         ...currentProject,
         pages: currentProject.pages.map((item) => item.id === page.id ? {
@@ -487,7 +489,7 @@ const StoryBookStudio: React.FC = () => {
             <div>
               <label className="mb-2 block text-[10px] font-black uppercase tracking-[0.2em] text-slate-500">Book type</label>
               <div className="grid gap-2 sm:grid-cols-2">
-                {BOOK_TYPES.map((type) => <button key={type.value} type="button" onClick={() => setBookType(type.value)} className={`rounded-lg border p-4 text-left ${bookType === type.value ? 'border-amber-500 bg-amber-500/10' : 'border-slate-800 bg-slate-900'}`}><span className={`text-xs font-black ${bookType === type.value ? 'text-amber-300' : 'text-white'}`}>{type.label}</span><span className="mt-1 block text-[10px] leading-relaxed text-slate-500">{type.note}</span></button>)}
+                {BOOK_TYPES.map((type) => <button key={type.value} type="button" onClick={() => { setBookType(type.value); if (type.value === 'shoot-sketch') { setVisualStyle('illustrated'); setPageCount(8); } }} className={`rounded-lg border p-4 text-left ${type.value === 'shoot-sketch' ? 'sm:col-span-2' : ''} ${bookType === type.value ? 'border-amber-500 bg-amber-500/10' : 'border-slate-800 bg-slate-900'}`}><span className={`text-xs font-black ${bookType === type.value ? 'text-amber-300' : 'text-white'}`}>{type.label}</span><span className="mt-1 block text-[10px] leading-relaxed text-slate-500">{type.note}</span></button>)}
               </div>
             </div>
           </div>
@@ -495,7 +497,11 @@ const StoryBookStudio: React.FC = () => {
           <div className="space-y-5 border-l-0 border-slate-800 lg:border-l lg:pl-6">
             <div>
               <label className="mb-2 block text-[10px] font-black uppercase tracking-[0.2em] text-slate-500">Visual style</label>
-              <div className="grid grid-cols-2 gap-2">{VISUAL_STYLES.map((style) => <button key={style.value} type="button" onClick={() => setVisualStyle(style.value)} className={`h-10 rounded-lg border text-[11px] font-black ${visualStyle === style.value ? 'border-amber-500 bg-amber-500 text-slate-950' : 'border-slate-700 bg-slate-900 text-slate-300'}`}>{style.label}</button>)}</div>
+              {bookType === 'shoot-sketch' ? (
+                <div className="rounded-lg border border-slate-500 bg-white p-4 text-slate-950"><p className="text-xs font-black">Black & White Pencil Storyboard</p><p className="mt-1 text-[10px] leading-relaxed text-slate-600">White paper, graphite/ink lines, framing နဲ့ lighting direction ကို lock လုပ်ထားပါတယ်။</p></div>
+              ) : (
+                <div className="grid grid-cols-2 gap-2">{VISUAL_STYLES.map((style) => <button key={style.value} type="button" onClick={() => setVisualStyle(style.value)} className={`h-10 rounded-lg border text-[11px] font-black ${visualStyle === style.value ? 'border-amber-500 bg-amber-500 text-slate-950' : 'border-slate-700 bg-slate-900 text-slate-300'}`}>{style.label}</button>)}</div>
+              )}
             </div>
             <div>
               <label className="mb-2 block text-[10px] font-black uppercase tracking-[0.2em] text-slate-500">Pages</label>

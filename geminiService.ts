@@ -1021,6 +1021,7 @@ export const generateStoryBookPlan = async (
 ): Promise<StoryBookPlan> => {
   const typeDirections: Record<StoryBookType, string> = {
     'visual-concept': 'Rewrite the source as a photography visual narrative: cover, emotional premise, palette/outfit, location/lighting, poses, shot progression, details, and final vision as space allows. It must read like a story, not disconnected production notes.',
+    'shoot-sketch': 'Build a practical pre-production shooting storyboard. Each page is one distinct key shot in sequence and must specify subject pose/action, shot size and framing, camera angle, suggested lens, camera position or movement, light direction, location/props, and the reason this shot matters. Start with an establishing shot and progress through hero, interaction, detail, movement, and closing options as space allows.',
     'client-presentation': 'Rewrite the source as a polished client-facing concept proposal with a persuasive narrative arc, clear experience, visual direction, and confident next step without inventing prices or package promises.',
     'social-carousel': 'Rewrite the source as copy-ready visual social carousel pages with a strong opening hook, progressive story beats, useful visual details, and a natural soft CTA.',
     'strategy-book': 'Rewrite the owner request and recommendation as a visual business action story: current situation, insight, opportunity, core decision, ordered actions, execution checkpoints, measures, and next decision as space allows.',
@@ -1031,12 +1032,15 @@ export const generateStoryBookPlan = async (
     'premium-minimal': 'premium minimal editorial, controlled palette, strong composition, uncluttered details',
     illustrated: 'polished editorial illustration, tactile textures, cohesive shapes, sophisticated not childish',
   };
+  const selectedStyleDirection = input.bookType === 'shoot-sketch'
+    ? 'strict black-and-white previsualization sketch on clean white storyboard paper, graphite pencil and fine black ink lines, loose professional photographer thumbnail drawing, grayscale shading only, clearly readable pose, camera framing, and light direction, never photorealistic and never colored'
+    : styleDirections[input.visualStyle];
   const prompt = `Create a ${input.pageCount}-page visual Story Book for With You Photo Studio / WYPS.
 
 Source label: ${input.sourceLabel}
 Suggested title: ${input.suggestedTitle || 'Choose the strongest concise title'}
 Book type direction: ${typeDirections[input.bookType]}
-Visual style direction: ${styleDirections[input.visualStyle]}
+Visual style direction: ${selectedStyleDirection}
 
 Source idea:
 ${input.source.trim().slice(0, 20_000)}
@@ -1049,6 +1053,7 @@ Rules:
 - For Moodboard sources, turn mood, setting, wardrobe, light, pose, and emotion into a connected visual experience. For Strategy sources, retain the owner's original request, decision logic, risks, and recommended actions.
 - Open with a clear promise or premise and make the final page resolve the story with a useful direction, decision, or soft next action.
 - Never mention being an AI, the prompt, source text, or page-generation process inside the Story Book copy.
+- For shoot-sketch only: make every visualPrompt explicitly demand a black-and-white graphite/ink storyboard sketch on white paper. No color and no photorealism. Make shotNote production-ready with Shot size, Camera angle, Lens, Pose/Action, Lighting direction, Location/Props, and Sequence purpose. Do not invent unavailable gear; mark flexible lens choices as suggestions.
 - visualPrompt must be detailed English for an AI rough image. Describe composition, subject, environment, lighting, palette, lens/visual treatment, and mood.
 - Do not request text, logos, watermarks, captions, or letterforms inside generated images.
 - Keep people anonymous and natural unless the source explicitly contains a reference photo. Never claim a generated face is the real client.
@@ -1099,6 +1104,7 @@ ${getStudioContext({ includePricing: false })}`;
 export const generateStoryBookImage = async (
   page: Pick<StoryBookPage, 'title' | 'visualPrompt'>,
   styleBible: string,
+  bookType: StoryBookType,
   reference?: { mimeType: string; data: string } | null,
   options: { signal?: AbortSignal } = {},
 ): Promise<{ dataUrl: string; mimeType: string }> => {
@@ -1106,6 +1112,11 @@ export const generateStoryBookImage = async (
   if (reference?.data && reference.mimeType.startsWith('image/')) {
     parts.push({ inlineData: { mimeType: reference.mimeType, data: reference.data } });
   }
+  const sketchRequirements = bookType === 'shoot-sketch' ? `
+- Render strictly as a black-and-white graphite pencil and fine ink storyboard sketch on clean white paper.
+- Show one clearly staged photographic shot idea. Make pose/action, framing, camera viewpoint, foreground/background relationship, and light direction visually understandable.
+- Use only grayscale pencil shading. No color, no photorealism, no polished finished-photo appearance.
+- Small nonverbal composition guides, crop marks, motion arrows, and light arrows are allowed, but no readable words or labels.` : '';
   parts.push({
     text: `Generate one 4:5 vertical rough visual for a premium visual story book.
 
@@ -1118,7 +1129,8 @@ Requirements:
 - Treat this as a concept visualization, not proof of a real client or completed shoot.
 - Keep the visual style, palette, lighting, wardrobe logic, and recurring details consistent with the locked style.
 - If a reference image is supplied, use only its clearly visible scene, wardrobe, color, and mood evidence. Keep people natural; do not add identity claims or invent hidden details.
-- Preserve Outdoor/Indoor evidence correctly. Do not turn an outdoor source into a studio scene or vice versa unless the page direction explicitly asks for a transition.`,
+- Preserve Outdoor/Indoor evidence correctly. Do not turn an outdoor source into a studio scene or vice versa unless the page direction explicitly asks for a transition.
+${sketchRequirements}`,
   });
 
   const response = await handleResponse(() => callGeminiProxy({

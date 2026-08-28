@@ -1,4 +1,4 @@
-export type StoryBookType = 'visual-concept' | 'client-presentation' | 'social-carousel' | 'strategy-book';
+export type StoryBookType = 'visual-concept' | 'shoot-sketch' | 'client-presentation' | 'social-carousel' | 'strategy-book';
 export type StoryBookVisualStyle = 'cinematic' | 'soft-editorial' | 'premium-minimal' | 'illustrated';
 
 export type StoryBookPage = {
@@ -59,7 +59,7 @@ const iso = (value: unknown) => {
   return Number.isFinite(parsed.getTime()) ? parsed.toISOString() : new Date().toISOString();
 };
 const validBookType = (value: unknown): StoryBookType => (
-  ['visual-concept', 'client-presentation', 'social-carousel', 'strategy-book'].includes(String(value))
+  ['visual-concept', 'shoot-sketch', 'client-presentation', 'social-carousel', 'strategy-book'].includes(String(value))
     ? value as StoryBookType
     : 'visual-concept'
 );

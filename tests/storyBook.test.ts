@@ -72,6 +72,15 @@ test('Story Book normalization keeps a valid six-page visual plan', () => {
   assert.match(normalized?.source || '', /Outdoor/);
 });
 
+test('Story Book normalization preserves the black-and-white shoot sketch type', () => {
+  const sketchProject = project();
+  sketchProject.bookType = 'shoot-sketch';
+  sketchProject.visualStyle = 'illustrated';
+  const normalized = normalizeStoryBookProject(sketchProject);
+  assert.equal(normalized?.bookType, 'shoot-sketch');
+  assert.equal(normalized?.visualStyle, 'illustrated');
+});
+
 test('Story Book persistence strips generated base64 images from localStorage', () => {
   values.clear();
   upsertStoryBook(project());

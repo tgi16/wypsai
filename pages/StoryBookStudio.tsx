@@ -466,6 +466,12 @@ const StoryBookStudio: React.FC = () => {
           <div className="space-y-5">
             <div>
               <label className="mb-2 block text-[10px] font-black uppercase tracking-[0.2em] text-slate-500">Source idea</label>
+              {sourceType !== 'manual' && (
+                <div className="mb-3 flex items-start gap-3 rounded-lg border border-emerald-500/20 bg-emerald-500/10 p-3">
+                  <Check className="mt-0.5 h-4 w-4 shrink-0 text-emerald-400" />
+                  <div><p className="text-xs font-black text-emerald-300">{sourceLabel} ထည့်ပြီးပါပြီ</p><p className="mt-1 text-[10px] leading-relaxed text-slate-400">အောက်က idea ကို page-by-page story စာသားနဲ့ visual direction အဖြစ် AI က ပြန်ရေးပေးပါမယ်။ မဖန်တီးခင် လိုတာထပ်ဖြည့်နိုင်ပါတယ်။</p></div>
+                </div>
+              )}
               <textarea value={source} onChange={(event) => setSource(event.target.value)} maxLength={20000} rows={10} placeholder="Moodboard idea, Strategy answer သို့မဟုတ် ကိုယ်တိုင်စဉ်းစားထားတဲ့ concept ကိုရေးပါ..." className="w-full resize-y rounded-lg border border-slate-700 bg-slate-950 p-4 text-sm leading-relaxed text-white outline-none focus:border-amber-500" />
               <div className="mt-2 flex items-center justify-between gap-3 text-[10px] text-slate-600"><span>{sourceLabel}</span><span>{source.length}/20,000</span></div>
             </div>

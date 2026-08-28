@@ -43,6 +43,17 @@ export const STORY_BOOK_UPDATED_EVENT = 'wyps_storybooks_updated';
 export const MAX_STORY_BOOK_PROJECTS = 20;
 
 const text = (value: unknown, max = 4000) => typeof value === 'string' ? value.trim().slice(0, max) : '';
+
+export const buildMoodboardStoryBookSource = (vibe: string, concept: string) => [
+  `Customer vibe:\n${text(vibe, 4000)}`,
+  `Moodboard & Concept recommendation:\n${text(concept, 16_000)}`,
+].filter((section) => !section.endsWith('\n')).join('\n\n').slice(0, 20_000);
+
+export const buildStrategyStoryBookSource = (answer: string, originalRequest?: string) => [
+  originalRequest ? `Owner request:\n${text(originalRequest, 6000)}` : '',
+  `Strategy Partner recommendation:\n${text(answer, 14_000)}`,
+].filter(Boolean).join('\n\n').slice(0, 20_000);
+
 const iso = (value: unknown) => {
   const parsed = new Date(typeof value === 'string' ? value : 0);
   return Number.isFinite(parsed.getTime()) ? parsed.toISOString() : new Date().toISOString();

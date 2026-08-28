@@ -4,7 +4,7 @@ import ReactMarkdown from 'react-markdown';
 import { saveGeneratedHistory } from '../generatedHistory';
 import { AppTab } from '../types';
 import { BookOpen, Save } from 'lucide-react';
-import { setStoryBookPrefill } from '../storyBook';
+import { buildMoodboardStoryBookSource, setStoryBookPrefill } from '../storyBook';
 
 const ConceptGenerator: React.FC<{ onNavigate?: (tab: AppTab) => void }> = ({ onNavigate }) => {
   const [vibe, setVibe] = useState('');
@@ -51,7 +51,7 @@ const ConceptGenerator: React.FC<{ onNavigate?: (tab: AppTab) => void }> = ({ on
   const createStoryBook = () => {
     if (!concept) return;
     setStoryBookPrefill({
-      source: [`Customer vibe: ${vibe}`, '', concept].join('\n'),
+      source: buildMoodboardStoryBookSource(vibe, concept),
       sourceLabel: 'Moodboard & Concept result',
       sourceType: 'moodboard',
       suggestedTitle: vibe.slice(0, 90),
@@ -113,7 +113,7 @@ const ConceptGenerator: React.FC<{ onNavigate?: (tab: AppTab) => void }> = ({ on
                 <Save className="h-4 w-4" /> {isSaving ? 'Saving...' : 'Save'}
               </button>
               <button onClick={createStoryBook} className="flex h-10 shrink-0 items-center gap-2 rounded-lg bg-amber-500 px-4 text-xs font-black text-slate-950 transition-colors hover:bg-amber-400">
-                <BookOpen className="h-4 w-4" /> Story Book ပြောင်းမယ်
+                <BookOpen className="h-4 w-4" /> Story Book ဖန်တီးမယ်
               </button>
             </div>
           </div>

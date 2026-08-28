@@ -1,6 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  buildMoodboardStoryBookSource,
+  buildStrategyStoryBookSource,
   normalizeStoryBookProject,
   readStoryBooks,
   STORY_BOOK_LOCAL_KEY,
@@ -8,6 +10,16 @@ import {
   stripStoryBookTransientData,
   upsertStoryBook,
 } from '../storyBook';
+
+test('Story Book source builders preserve Moodboard ideas and Strategy request context', () => {
+  const moodboard = buildMoodboardStoryBookSource('Outdoor sunset', 'Use mountain light and natural poses');
+  assert.match(moodboard, /Customer vibe:\nOutdoor sunset/);
+  assert.match(moodboard, /Moodboard & Concept recommendation:\nUse mountain light/);
+
+  const strategy = buildStrategyStoryBookSource('Launch the smaller package first', 'Which package should I launch?');
+  assert.match(strategy, /Owner request:\nWhich package should I launch\?/);
+  assert.match(strategy, /Strategy Partner recommendation:\nLaunch the smaller package first/);
+});
 
 const values = new Map<string, string>();
 Object.defineProperty(globalThis, 'localStorage', {

@@ -1017,10 +1017,10 @@ const STORY_BOOK_PAGE_SCHEMA = {
 
 export const generateStoryBookPlan = async (input: StoryBookPlanInput): Promise<StoryBookPlan> => {
   const typeDirections: Record<StoryBookType, string> = {
-    'visual-concept': 'Build a photography visual concept book: cover, mood/story, palette/outfit, location/lighting, poses, shot sequence, details, and final direction as space allows.',
-    'client-presentation': 'Build a polished client-facing concept proposal that explains the idea visually and confidently without inventing prices or package promises.',
-    'social-carousel': 'Build a visual social carousel with a clear opening hook, story progression, useful visual beats, and a soft final CTA.',
-    'strategy-book': 'Turn the source into a visual business action book: context, opportunity, core strategy, actions, execution, measures, and next decision as space allows.',
+    'visual-concept': 'Rewrite the source as a photography visual narrative: cover, emotional premise, palette/outfit, location/lighting, poses, shot progression, details, and final vision as space allows. It must read like a story, not disconnected production notes.',
+    'client-presentation': 'Rewrite the source as a polished client-facing concept proposal with a persuasive narrative arc, clear experience, visual direction, and confident next step without inventing prices or package promises.',
+    'social-carousel': 'Rewrite the source as copy-ready visual social carousel pages with a strong opening hook, progressive story beats, useful visual details, and a natural soft CTA.',
+    'strategy-book': 'Rewrite the owner request and recommendation as a visual business action story: current situation, insight, opportunity, core decision, ordered actions, execution checkpoints, measures, and next decision as space allows.',
   };
   const styleDirections: Record<StoryBookVisualStyle, string> = {
     cinematic: 'cinematic editorial photography, layered light, natural contrast, premium but believable',
@@ -1041,8 +1041,11 @@ ${input.source.trim().slice(0, 20_000)}
 Rules:
 - Keep the source idea and any supplied reference image as the source of truth. Inspect visible reference evidence before planning. Do not force Indoor onto Outdoor content or invent a package, price, place, client identity, outfit, or prop.
 - Write title, subtitle, narrative, and shotNote in natural Myanmar with necessary photography/business English only.
-- Every page must advance one coherent story. Avoid repeating the same message.
-- narrative should be short enough for a visual page: 2-4 compact sentences.
+- Every page must advance one coherent beginning-to-end story. Preserve the strongest ideas and constraints from the source; avoid repetition or generic filler.
+- narrative is the copy-ready Story Book body, not an explanation of what could be written. Use 2-4 compact, natural sentences that can appear directly on the page.
+- For Moodboard sources, turn mood, setting, wardrobe, light, pose, and emotion into a connected visual experience. For Strategy sources, retain the owner's original request, decision logic, risks, and recommended actions.
+- Open with a clear promise or premise and make the final page resolve the story with a useful direction, decision, or soft next action.
+- Never mention being an AI, the prompt, source text, or page-generation process inside the Story Book copy.
 - visualPrompt must be detailed English for an AI rough image. Describe composition, subject, environment, lighting, palette, lens/visual treatment, and mood.
 - Do not request text, logos, watermarks, captions, or letterforms inside generated images.
 - Keep people anonymous and natural unless the source explicitly contains a reference photo. Never claim a generated face is the real client.

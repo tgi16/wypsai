@@ -66,7 +66,7 @@ import {
   STRATEGY_ATTACHMENT_ACCEPT,
 } from '../strategyAttachment';
 import { AppTab } from '../types';
-import { setStoryBookPrefill } from '../storyBook';
+import { buildStrategyStoryBookSource, setStoryBookPrefill } from '../storyBook';
 
 type Message = StrategyMessage;
 
@@ -400,10 +400,20 @@ const StrategyPartner: React.FC<{ onNavigate?: (tab: AppTab) => void }> = ({ onN
     }
   };
 
+  const originalRequestFor = (message: Message) => {
+    const messageIndex = messages.findIndex((item) => item.id === message.id);
+    return messages
+      .slice(0, messageIndex)
+      .reverse()
+      .find((item) => item.role === 'user')?.content;
+  };
+
   const createStoryBookFromMessage = (message: Message) => {
+    const originalRequest = originalRequestFor(message);
+    if (!originalRequest) return;
     setStoryBookPrefill({
-      source: message.content,
-      sourceLabel: 'Strategy Partner AI answer',
+      source: buildStrategyStoryBookSource(message.content, originalRequest),
+      sourceLabel: 'Strategy Partner conversation',
       sourceType: 'strategy',
       suggestedTitle: message.content.replace(/[#*_`]/g, '').split(/[။.!?\n]/)[0].trim().slice(0, 90),
       bookType: 'strategy-book',
@@ -698,32 +708,20 @@ const StrategyPartner: React.FC<{ onNavigate?: (tab: AppTab) => void }> = ({ onN
                 ? 'rounded-tr-sm bg-amber-500 text-slate-950 shadow-lg shadow-amber-500/10'
                 : 'rounded-tl-sm border border-slate-700 bg-slate-800 text-slate-200 shadow-lg shadow-black/20'
             }`}>
-              {msg.role === 'model' && (
-                <button
-                  type="button"
-                  onClick={() => createStoryBookFromMessage(msg)}
-                  className="absolute right-11 top-2 flex h-8 w-8 items-center justify-center rounded-lg border border-slate-600 bg-slate-900/80 text-slate-400 opacity-100 transition-colors hover:border-amber-500/50 hover:text-amber-300 sm:opacity-0 sm:group-hover:opacity-100 sm:focus:opacity-100"
-                  title="Create Story Book"
-                  aria-label="Create Story Book from answer"
-                >
-                  <BookOpen className="h-4 w-4" />
-                </button>
-              )}
-              {msg.role === 'model' && (
-                <button
-                  type="button"
-                  onClick={() => void copyMessage(msg)}
-                  className="absolute right-2 top-2 flex h-8 w-8 items-center justify-center rounded-lg border border-slate-600 bg-slate-900/80 text-slate-400 opacity-100 transition-colors hover:text-white sm:opacity-0 sm:group-hover:opacity-100 sm:focus:opacity-100"
-                  title="Copy answer"
-                  aria-label="Copy answer"
-                >
-                  {copiedMessageId === msg.id ? <Check className="h-4 w-4 text-emerald-400" /> : <Copy className="h-4 w-4" />}
-                </button>
-              )}
               {msg.role === 'model' ? (
-                <div className="prose prose-invert prose-sm max-w-none pr-16 prose-p:leading-relaxed prose-a:text-amber-400 sm:prose-base">
-                  <ReactMarkdown>{msg.content}</ReactMarkdown>
-                </div>
+                <>
+                  <div className="prose prose-invert prose-sm max-w-none prose-p:leading-relaxed prose-a:text-amber-400 sm:prose-base">
+                    <ReactMarkdown>{msg.content}</ReactMarkdown>
+                  </div>
+                  <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-slate-700/80 pt-3">
+                    {originalRequestFor(msg) && <button type="button" onClick={() => createStoryBookFromMessage(msg)} className="flex h-9 items-center gap-2 rounded-lg bg-amber-500 px-3 text-[11px] font-black text-slate-950 transition-colors hover:bg-amber-400">
+                      <BookOpen className="h-4 w-4" /> Story Book ဖန်တီးမယ်
+                    </button>}
+                    <button type="button" onClick={() => void copyMessage(msg)} className="flex h-9 w-9 items-center justify-center rounded-lg border border-slate-600 text-slate-400 transition-colors hover:text-white" title="Copy answer" aria-label="Copy answer">
+                      {copiedMessageId === msg.id ? <Check className="h-4 w-4 text-emerald-400" /> : <Copy className="h-4 w-4" />}
+                    </button>
+                  </div>
+                </>
               ) : (
                 <p className="whitespace-pre-wrap font-medium leading-relaxed">{msg.content}</p>
               )}

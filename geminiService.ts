@@ -1015,7 +1015,10 @@ const STORY_BOOK_PAGE_SCHEMA = {
   required: ['title', 'narrative', 'visualPrompt', 'shotNote'],
 };
 
-export const generateStoryBookPlan = async (input: StoryBookPlanInput): Promise<StoryBookPlan> => {
+export const generateStoryBookPlan = async (
+  input: StoryBookPlanInput,
+  options: { signal?: AbortSignal } = {},
+): Promise<StoryBookPlan> => {
   const typeDirections: Record<StoryBookType, string> = {
     'visual-concept': 'Rewrite the source as a photography visual narrative: cover, emotional premise, palette/outfit, location/lighting, poses, shot progression, details, and final vision as space allows. It must read like a story, not disconnected production notes.',
     'client-presentation': 'Rewrite the source as a polished client-facing concept proposal with a persuasive narrative arc, clear experience, visual direction, and confident next step without inventing prices or package promises.',
@@ -1075,7 +1078,7 @@ ${getStudioContext({ includePricing: false })}`;
         required: ['title', 'subtitle', 'styleBible', 'pages'],
       },
     },
-  }));
+  }, options));
   const parsed = JSON.parse(response.text || '{}') as StoryBookPlan;
   if (!Array.isArray(parsed.pages) || parsed.pages.length !== input.pageCount) {
     throw new Error('Story Book page structure မပြည့်စုံသေးပါ။ ပြန်စမ်းပေးပါ။');

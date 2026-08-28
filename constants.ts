@@ -1,6 +1,6 @@
 import { AppTab } from './types';
 
-export const APP_VERSION = '1.8.1';
+export const APP_VERSION = '1.8.2';
 
 export type SidebarMenuItem = {
   id: AppTab;

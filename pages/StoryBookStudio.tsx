@@ -171,6 +171,12 @@ const StoryBookStudio: React.FC = () => {
     window.setTimeout(() => setNotice(''), 2800);
   };
 
+  const cancelActiveGeneration = () => {
+    if (!abortRef.current) return;
+    abortRef.current.abort();
+    showNotice('Story Book ဖန်တီးနေမှုကို ရပ်လိုက်ပါပြီ။');
+  };
+
   const updateProject = (updater: (current: StoryBookProject) => StoryBookProject) => {
     setProject((current) => current ? { ...updater(current), updatedAt: new Date().toISOString() } : current);
   };
@@ -276,7 +282,10 @@ const StoryBookStudio: React.FC = () => {
     abortRef.current = controller;
     setIsPlanning(true);
     try {
-      const plan = await generateStoryBookPlan({ source, sourceLabel, bookType, visualStyle, pageCount, suggestedTitle, reference });
+      const plan = await generateStoryBookPlan(
+        { source, sourceLabel, bookType, visualStyle, pageCount, suggestedTitle, reference },
+        { signal: controller.signal },
+      );
       let nextProject: StoryBookProject = {
         id: projectId(),
         title: plan.title,
@@ -502,7 +511,7 @@ const StoryBookStudio: React.FC = () => {
             <button type="button" onClick={() => void createStoryBook()} disabled={!source.trim() || isPlanning} className="flex min-h-14 w-full items-center justify-center gap-2 rounded-lg bg-amber-500 px-5 text-sm font-black text-slate-950 hover:bg-amber-400 disabled:bg-slate-700 disabled:text-slate-500">
               {isPlanning ? <><LoaderCircle className="h-5 w-5 animate-spin" /> {generatingPageId ? 'ပုံအကြမ်းတွေ ဖန်တီးနေပါတယ်...' : 'Story structure တည်ဆောက်နေပါတယ်...'}</> : <><Sparkles className="h-5 w-5" /> Story Book ဖန်တီးမယ်</>}
             </button>
-            {isPlanning && <button type="button" onClick={() => abortRef.current?.abort()} className="flex h-11 w-full items-center justify-center gap-2 rounded-lg border border-red-400/30 bg-red-500/10 text-xs font-black text-red-300"><Square className="h-3.5 w-3.5 fill-current" /> Cancel</button>}
+            {isPlanning && <button type="button" onClick={cancelActiveGeneration} className="flex h-11 w-full items-center justify-center gap-2 rounded-lg border border-red-400/40 bg-red-500/10 text-xs font-black text-red-300"><Square className="h-3.5 w-3.5 fill-current" /> ဖန်တီးမှု ရပ်မယ်</button>}
           </div>
         </section>
       </div>
@@ -515,6 +524,7 @@ const StoryBookStudio: React.FC = () => {
       <header className="flex flex-col gap-3 border-b border-slate-800 pb-4 xl:flex-row xl:items-center xl:justify-between">
         <div className="min-w-0"><p className="text-[9px] font-black uppercase tracking-[0.25em] text-amber-400">{project.pages.length}-page {project.bookType}</p><h1 className="mt-1 truncate text-2xl font-black text-white">{project.title}</h1><p className="mt-1 truncate text-xs text-slate-500">{project.subtitle}</p></div>
         <div className="flex gap-2 overflow-x-auto pb-1">
+          {(isPlanning || generatingPageId) && <button type="button" onClick={cancelActiveGeneration} className="flex h-10 shrink-0 items-center gap-2 rounded-lg border border-red-400/50 bg-red-500/15 px-3 text-xs font-black text-red-300"><Square className="h-3.5 w-3.5 fill-current" /> Cancel AI</button>}
           <button type="button" onClick={resetComposer} className="flex h-10 shrink-0 items-center gap-2 rounded-lg border border-slate-700 bg-slate-900 px-3 text-xs font-black text-white"><Plus className="h-4 w-4" /> New</button>
           <button type="button" onClick={() => void persistProject(project)} disabled={isSaving} className="flex h-10 shrink-0 items-center gap-2 rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 text-xs font-black text-amber-300"><Save className="h-4 w-4" /> {isSaving ? 'Saving' : 'Save'}</button>
           <button type="button" onClick={() => void downloadCurrentPng()} disabled={isExporting} className="flex h-10 shrink-0 items-center gap-2 rounded-lg border border-slate-700 bg-slate-900 px-3 text-xs font-black text-white"><FileImage className="h-4 w-4" /> PNG</button>
@@ -548,7 +558,6 @@ const StoryBookStudio: React.FC = () => {
               <input ref={pageImageInputRef} type="file" accept="image/jpeg,image/png,image/webp" className="hidden" onChange={(event) => void useOwnPageImage(event.target.files?.[0])} />
               <button type="button" onClick={() => pageImageInputRef.current?.click()} className="flex min-h-11 items-center justify-center gap-2 rounded-lg border border-slate-700 bg-slate-900 text-xs font-black text-white"><ImagePlus className="h-4 w-4" /> Own photo</button>
             </div>
-            {generatingPageId && <button type="button" onClick={() => abortRef.current?.abort()} className="flex h-10 w-full items-center justify-center gap-2 rounded-lg border border-red-400/30 bg-red-500/10 text-xs font-black text-red-300"><Square className="h-3.5 w-3.5 fill-current" /> Cancel image</button>}
           </>}
         </aside>
       </div>

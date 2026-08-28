@@ -2,10 +2,24 @@ import { POS_PACKAGE_CACHE_KEY, POS_PRICING_CONTEXT_KEY } from './pricingCatalog
 
 export type BusinessBrainMode = 'strategy' | 'content';
 
+export type BusinessBrainSourceId = 'bookings' | 'approvals' | 'history' | 'insights' | 'packages' | 'usage';
+
+export type BusinessBrainSource = {
+  id: BusinessBrainSourceId;
+  label: string;
+  available: boolean;
+  detail: string;
+};
+
+export type BusinessBrainOrigin = 'device' | 'cloud';
+
 export type BusinessBrainSnapshot = {
   generatedAt: string;
+  origin: BusinessBrainOrigin;
+  cloudAgeHours?: number;
   sourceCount: number;
   totalSources: number;
+  sources: BusinessBrainSource[];
   metrics: {
     bookings: number;
     upcomingSevenDays: number;
@@ -21,6 +35,10 @@ export type BusinessBrainSnapshot = {
 };
 
 type StorageReader = (key: string) => string | null;
+
+export const BUSINESS_BRAIN_CLOUD_KEY = 'wyps_business_brain_cloud_v1';
+export const BUSINESS_BRAIN_UPDATED_EVENT = 'wyps_business_brain_updated';
+const MAX_CLOUD_AGE_MS = 7 * 24 * 60 * 60 * 1000;
 
 type BrainBooking = {
   id?: string;
@@ -107,6 +125,7 @@ export const buildBusinessBrainSnapshot = (
   mode: BusinessBrainMode = 'strategy',
   read: StorageReader = defaultReader,
   now = new Date(),
+  allowCloudFallback = true,
 ): BusinessBrainSnapshot => {
   const bookings = readJson<BrainBooking[]>(read, KEYS.bookings, []);
   const reminders = readJson<Record<string, boolean>>(read, KEYS.reminders, {});
@@ -158,22 +177,24 @@ export const buildBusinessBrainSnapshot = (
 
   const dayKey = now.toLocaleDateString('en-CA');
   const todayUsage = usageByDay[dayKey] || {};
-  const sourceChecks = [
-    read(KEYS.bookings) !== null,
-    read(KEYS.approvals) !== null,
-    read(KEYS.generatedHistory) !== null || read(KEYS.contentHistory) !== null,
-    Boolean(insights),
-    read(POS_PACKAGE_CACHE_KEY) !== null || read(POS_PRICING_CONTEXT_KEY) !== null,
-    Boolean(usageByDay[dayKey]),
+  const sources: BusinessBrainSource[] = [
+    { id: 'bookings', label: 'POS Bookings', available: read(KEYS.bookings) !== null, detail: bookings.length ? `${bookings.length} bookings cached` : 'POS cache မရှိသေးပါ' },
+    { id: 'approvals', label: 'Content Approval', available: read(KEYS.approvals) !== null, detail: approvals.length ? `${approvals.length} items` : 'Approval data မရှိသေးပါ' },
+    { id: 'history', label: 'Content History', available: read(KEYS.generatedHistory) !== null || read(KEYS.contentHistory) !== null, detail: recentContent.length ? `${recentContent.length} recent items` : 'Generated history မရှိသေးပါ' },
+    { id: 'insights', label: 'Facebook Insights', available: Boolean(insights), detail: insights ? `${insightTopics.length || insightIdeas.length} signals` : 'Insights sync မလုပ်ရသေးပါ' },
+    { id: 'packages', label: 'Package Catalog', available: read(POS_PACKAGE_CACHE_KEY) !== null || read(POS_PRICING_CONTEXT_KEY) !== null, detail: packages.length ? `${packages.length} package rows` : 'Package catalog မရှိသေးပါ' },
+    { id: 'usage', label: 'AI Usage', available: read(KEYS.usage) !== null, detail: read(KEYS.usage) !== null ? `${Number(todayUsage.count) || 0} calls today` : 'Usage tracker မစရသေးပါ' },
   ];
-  const sourceCount = sourceChecks.filter(Boolean).length;
+  const sourceCount = sources.filter((source) => source.available).length;
 
   const priorities: string[] = [];
   if (upcoming.length) priorities.push(`လာမည့် ၇ ရက်အတွင်း booking/shoot ${upcoming.length} ခုကို confirm နှင့် reminder စစ်ရန်`);
   if (overdue.length) priorities.push(`ရက်ကျော်နေပြီး မပြီးသေးသော booking/work ${overdue.length} ခု follow-up လုပ်ရန်`);
   if (outstandingBalance > 0) priorities.push(`Open booking များမှ လက်ကျန်ငွေ စုစုပေါင်း ${money(outstandingBalance)} ကို collection plan ထားရန်`);
   if (pendingContent) priorities.push(`Draft/Ready content ${pendingContent} ခုကို approve, schedule သို့မဟုတ် archive လုပ်ရန်`);
-  if (!priorities.length) priorities.push('Critical backlog မတွေ့ပါ။ booking pipeline နှင့် content pipeline အသစ်တိုးရန် ဦးစားပေးနိုင်သည်။');
+  if (!priorities.length) priorities.push(sourceCount
+    ? 'လက်ရှိရရှိထားသော data ထဲတွင် critical backlog မတွေ့ပါ။ Missing sources ကို sync ပြီးမှ final decision ချပါ။'
+    : 'Business data မရသေးပါ။ POS, package catalog, content history သို့မဟုတ် insights တစ်ခုခုကို အရင် sync လုပ်ပါ။');
 
   const contentSignals = [
     insightTopics.length ? `Facebook top topics: ${insightTopics.join(', ')}` : '',
@@ -209,11 +230,12 @@ export const buildBusinessBrainSnapshot = (
     `Generated: ${now.toLocaleString('en-GB', { timeZone: 'Asia/Yangon' })} Asia/Yangon`,
     `Mode: ${mode}`,
     'Privacy rule: client phone numbers, notes, auth tokens, account IDs, and raw secrets are excluded. Do not ask for or infer them.',
-    `Data freshness: ${sourceCount}/${sourceChecks.length} local sources available. Missing data means unknown, never zero unless explicitly shown.`,
+    `Data freshness: ${sourceCount}/${sources.length} device sources available. Missing data means unknown, never zero unless explicitly shown.`,
+    `Source health: ${sources.map((source) => `${source.label}=${source.available ? `available (${source.detail})` : 'missing'}`).join('; ')}.`,
     '',
     '[OPERATIONS]',
     `Bookings cached: ${bookings.length}; open: ${openBookings.length}; upcoming 7 days: ${upcoming.length}; overdue open: ${overdue.length}; outstanding open balance: ${money(outstandingBalance)}.`,
-    packageMix.length ? `Observed booking mix: ${packageMix.map(([name, count]) => `${name} (${count})`).join(', ')}.` : 'Observed booking mix: no cached bookings.',
+    packageMix.length ? `Observed booking mix: ${packageMix.map(([name, count]) => `${name} (${count})`).join(', ')}.` : sources[0].available ? 'Observed booking mix: cached bookings contain no package names.' : 'Observed booking mix: unavailable because POS bookings are not synced.',
     actionRows.length ? `Priority booking rows:\n- ${actionRows.join('\n- ')}` : 'Priority booking rows: none available.',
     '',
     '[CONTENT PIPELINE]',
@@ -233,10 +255,12 @@ export const buildBusinessBrainSnapshot = (
     'Grounding rules: Use this snapshot only when relevant. State when a conclusion is based on incomplete data. Never invent demand, conversion, profit, package details, or performance. Distinguish observed data from recommendations.',
   ].join('\n').slice(0, 14_000);
 
-  return {
+  const localSnapshot: BusinessBrainSnapshot = {
     generatedAt: now.toISOString(),
+    origin: 'device',
     sourceCount,
-    totalSources: sourceChecks.length,
+    totalSources: sources.length,
+    sources,
     metrics: {
       bookings: bookings.length,
       upcomingSevenDays: upcoming.length,
@@ -250,6 +274,44 @@ export const buildBusinessBrainSnapshot = (
     suggestions,
     context,
   };
+
+  if (!allowCloudFallback) return localSnapshot;
+
+  const cloudSnapshot = readJson<BusinessBrainSnapshot | null>(read, BUSINESS_BRAIN_CLOUD_KEY, null);
+  const cloudGeneratedAt = new Date(cloudSnapshot?.generatedAt || 0).getTime();
+  const cloudAge = now.getTime() - cloudGeneratedAt;
+  const cloudIsUsable = cloudSnapshot
+    && Array.isArray(cloudSnapshot.sources)
+    && cloudSnapshot.sources.length === sources.length
+    && Number.isFinite(cloudGeneratedAt)
+    && cloudAge >= 0
+    && cloudAge <= MAX_CLOUD_AGE_MS
+    && cloudSnapshot.sourceCount > localSnapshot.sourceCount;
+
+  if (!cloudIsUsable) return localSnapshot;
+
+  const cloudAgeHours = Math.max(0, Math.round(cloudAge / (60 * 60 * 1000)));
+  return {
+    ...cloudSnapshot,
+    origin: 'cloud',
+    cloudAgeHours,
+    context: `${cloudSnapshot.context}\n[SYNC STATUS]\nUsing the more complete private cloud snapshot from ${cloudAgeHours} hour(s) ago. Treat time-sensitive details as stale when appropriate.`,
+  };
+};
+
+export const persistBusinessBrainCloudSnapshot = (snapshot: BusinessBrainSnapshot) => {
+  if (typeof localStorage === 'undefined') return;
+  try {
+    localStorage.setItem(BUSINESS_BRAIN_CLOUD_KEY, JSON.stringify({ ...snapshot, origin: 'cloud' }));
+    window.dispatchEvent(new CustomEvent(BUSINESS_BRAIN_UPDATED_EVENT, { detail: { action: 'remote' } }));
+  } catch (error) {
+    console.error('Business Brain cloud cache save failed:', error);
+  }
+};
+
+export const notifyBusinessBrainChanged = () => {
+  if (typeof window === 'undefined') return;
+  window.dispatchEvent(new CustomEvent(BUSINESS_BRAIN_UPDATED_EVENT, { detail: { action: 'local' } }));
 };
 
 export const getBusinessBrainContext = (mode: BusinessBrainMode = 'strategy') => (

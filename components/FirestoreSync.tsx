@@ -1,9 +1,16 @@
 import { useEffect } from 'react';
 import { User } from 'firebase/auth';
-import { collection, deleteDoc, doc, getDoc, getDocs, onSnapshot, setDoc, writeBatch } from 'firebase/firestore';
+import { collection, deleteDoc, doc, getDoc, getDocs, onSnapshot, serverTimestamp, setDoc, writeBatch } from 'firebase/firestore';
 import { db } from '../firebase';
 import { GENERATED_HISTORY_KEY, GeneratedHistoryItem, readGeneratedHistory } from '../generatedHistory';
 import { ApprovalItem, CONTENT_APPROVAL_KEY, readApprovalItems } from '../workflowBoard';
+import {
+  buildBusinessBrainSnapshot,
+  BUSINESS_BRAIN_CLOUD_KEY,
+  BUSINESS_BRAIN_UPDATED_EVENT,
+  BusinessBrainSnapshot,
+  persistBusinessBrainCloudSnapshot,
+} from '../businessBrain';
 
 const FAVORITES_KEY = 'wyps_saved_library_favorites_v1';
 const MIGRATION_KEY_PREFIX = 'wyps_firestore_sync_migrated_v2_';
@@ -102,6 +109,42 @@ const FirestoreSync: React.FC<{ user: User | null }> = ({ user }) => {
     const historyRef = collection(userRef, 'wyps_history');
     const approvalsRef = collection(userRef, 'wyps_approvals');
     const settingsRef = doc(userRef, 'wyps_settings', 'library');
+    const brainRef = doc(userRef, 'wyps_settings', 'business_brain');
+    let lastBrainFingerprint = '';
+
+    const brainFingerprint = (snapshot: BusinessBrainSnapshot) => JSON.stringify({
+      sourceCount: snapshot.sourceCount,
+      sources: snapshot.sources,
+      metrics: snapshot.metrics,
+      priorities: snapshot.priorities,
+      contentSignals: snapshot.contentSignals,
+      suggestions: snapshot.suggestions,
+      context: snapshot.context.replace(/^Generated:.*$/m, ''),
+    });
+
+    const syncLocalBrain = async () => {
+      const localSnapshot = buildBusinessBrainSnapshot('strategy', undefined, new Date(), false);
+      if (!localSnapshot.sourceCount) return;
+
+      const cloudSnapshot = readJson<BusinessBrainSnapshot | null>(BUSINESS_BRAIN_CLOUD_KEY, null);
+      const localSourceIds = new Set(localSnapshot.sources.filter((source) => source.available).map((source) => source.id));
+      const cloudGeneratedAt = new Date(cloudSnapshot?.generatedAt || 0).getTime();
+      const cloudIsFresh = Number.isFinite(cloudGeneratedAt)
+        && Date.now() - cloudGeneratedAt >= 0
+        && Date.now() - cloudGeneratedAt <= 7 * 24 * 60 * 60 * 1000;
+      const cloudHasMissingLocalSource = cloudIsFresh && Array.isArray(cloudSnapshot?.sources)
+        && cloudSnapshot.sources.some((source) => source.available && !localSourceIds.has(source.id));
+      if (cloudHasMissingLocalSource) return;
+
+      const fingerprint = brainFingerprint(localSnapshot);
+      if (fingerprint === lastBrainFingerprint) return;
+      await setDoc(brainRef, {
+        uid: user.uid,
+        snapshot: localSnapshot,
+        updatedAt: serverTimestamp(),
+      });
+      lastBrainFingerprint = fingerprint;
+    };
 
     const onHistoryUpdate = (event: Event) => {
       const detail = (event as CustomEvent).detail || {};
@@ -136,9 +179,21 @@ const FirestoreSync: React.FC<{ user: User | null }> = ({ user }) => {
         .catch((error) => console.error('Firestore favorites save failed:', error));
     };
 
+    const onBusinessBrainUpdate = (event: Event) => {
+      const detail = (event as CustomEvent).detail || {};
+      if (detail.action === 'remote') return;
+      void syncLocalBrain().catch((error) => console.error('Firestore Business Brain sync failed:', error));
+    };
+
     const start = async () => {
       try {
         await syncInitialData(user);
+        const remoteBrain = await getDoc(brainRef);
+        const remoteSnapshot = remoteBrain.data()?.snapshot as BusinessBrainSnapshot | undefined;
+        if (remoteSnapshot?.generatedAt && Array.isArray(remoteSnapshot.sources)) {
+          lastBrainFingerprint = brainFingerprint(remoteSnapshot);
+          persistBusinessBrainCloudSnapshot(remoteSnapshot);
+        }
       } catch (error) {
         console.error('Firestore initial sync failed:', error);
       }
@@ -162,16 +217,34 @@ const FirestoreSync: React.FC<{ user: User | null }> = ({ user }) => {
         window.dispatchEvent(new CustomEvent('wyps_saved_library_favorites_updated', { detail: { action: 'remote' } }));
       }, (error) => console.error('Firestore settings listener failed:', error));
 
+      const unsubscribeBrain = onSnapshot(brainRef, (snapshot) => {
+        if (!active || !snapshot.exists()) return;
+        const remoteSnapshot = snapshot.data()?.snapshot as BusinessBrainSnapshot | undefined;
+        if (!remoteSnapshot?.generatedAt || !Array.isArray(remoteSnapshot.sources)) return;
+        lastBrainFingerprint = brainFingerprint(remoteSnapshot);
+        persistBusinessBrainCloudSnapshot(remoteSnapshot);
+      }, (error) => console.error('Firestore Business Brain listener failed:', error));
+
       window.addEventListener('wyps_generated_history_updated', onHistoryUpdate);
       window.addEventListener('wyps_content_board_updated', onApprovalUpdate);
       window.addEventListener('wyps_saved_library_favorites_updated', onFavoritesUpdate);
+      window.addEventListener('wyps_generated_history_updated', onBusinessBrainUpdate);
+      window.addEventListener('wyps_content_board_updated', onBusinessBrainUpdate);
+      window.addEventListener(BUSINESS_BRAIN_UPDATED_EVENT, onBusinessBrainUpdate);
+      window.addEventListener('gemini_usage_updated', onBusinessBrainUpdate);
+      void syncLocalBrain().catch((error) => console.error('Firestore Business Brain initial save failed:', error));
       stopListeners = () => {
         unsubscribeHistory();
         unsubscribeApprovals();
         unsubscribeSettings();
+        unsubscribeBrain();
         window.removeEventListener('wyps_generated_history_updated', onHistoryUpdate);
         window.removeEventListener('wyps_content_board_updated', onApprovalUpdate);
         window.removeEventListener('wyps_saved_library_favorites_updated', onFavoritesUpdate);
+        window.removeEventListener('wyps_generated_history_updated', onBusinessBrainUpdate);
+        window.removeEventListener('wyps_content_board_updated', onBusinessBrainUpdate);
+        window.removeEventListener(BUSINESS_BRAIN_UPDATED_EVENT, onBusinessBrainUpdate);
+        window.removeEventListener('gemini_usage_updated', onBusinessBrainUpdate);
       };
     };
 

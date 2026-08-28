@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { getAuthorizedJsonHeaders } from '../apiClient';
+import { notifyBusinessBrainChanged } from '../businessBrain';
 import {
   buildPricingContext,
   FALLBACK_STUDIO_PACKAGES,
@@ -36,6 +37,7 @@ const PricingGuide: React.FC = () => {
   useEffect(() => {
     const context = buildPricingContext(packages, source === 'live' ? POS_PRICING_SOURCE_LABEL : `${POS_PRICING_SOURCE_LABEL} ${source}`);
     localStorage.setItem(POS_PRICING_CONTEXT_KEY, context);
+    notifyBusinessBrainChanged();
   }, [packages, source]);
 
   useEffect(() => {
@@ -69,6 +71,7 @@ const PricingGuide: React.FC = () => {
             packages: livePackages,
             lastUpdated: data.lastUpdated || new Date().toISOString(),
           }));
+          notifyBusinessBrainChanged();
           if (data.session?.refreshToken) {
             localStorage.setItem(POS_SESSION_KEY, JSON.stringify(data.session));
           }

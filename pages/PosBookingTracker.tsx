@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { AppTab } from '../types';
 import { getAuthorizedJsonHeaders } from '../apiClient';
+import { notifyBusinessBrainChanged } from '../businessBrain';
 
 interface PosBookingTrackerProps {
   onNavigate: (tab: AppTab) => void;
@@ -308,6 +309,7 @@ const PosBookingTracker: React.FC<PosBookingTrackerProps> = ({ onNavigate }) => 
         setEmail(nextSession.email);
       }
       localStorage.setItem(POS_CACHE_KEY, JSON.stringify(nextBookings));
+      notifyBusinessBrainChanged();
       setPassword('');
       setConnected(true);
     } catch (err: any) {
@@ -436,6 +438,7 @@ const PosBookingTracker: React.FC<PosBookingTrackerProps> = ({ onNavigate }) => 
     if (!next[key]) delete next[key];
     setReminderStatus(next);
     localStorage.setItem(POS_REMINDER_STATUS_KEY, JSON.stringify(next));
+    notifyBusinessBrainChanged();
     showToast(next[key] ? 'Reminder sent အဖြစ်မှတ်ပြီးပါပြီ။' : 'Reminder sent status ကိုပြန်ဖြုတ်ပြီးပါပြီ။');
   };
 
@@ -587,6 +590,7 @@ const PosBookingTracker: React.FC<PosBookingTrackerProps> = ({ onNavigate }) => 
               onClick={() => {
                 localStorage.removeItem(POS_SESSION_KEY);
                 localStorage.removeItem(POS_CACHE_KEY);
+                notifyBusinessBrainChanged();
                 setConnected(false);
                 setBookings([]);
                 setPassword('');

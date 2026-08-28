@@ -5,6 +5,7 @@ import { POS_PACKAGE_CACHE_KEY, POS_PRICING_CONTEXT_KEY, POS_SESSION_KEY } from 
 import { readGeneratedHistory } from '../generatedHistory';
 import { readApprovalItems } from '../workflowBoard';
 import { getAuthorizedJsonHeaders } from '../apiClient';
+import { notifyBusinessBrainChanged } from '../businessBrain';
 
 interface DashboardProps {
   onNavigate: (tab: AppTab) => void;
@@ -218,6 +219,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onNavigate }) => {
       const nextBookings = Array.isArray(data.bookings) ? data.bookings : [];
       setBookings(nextBookings);
       localStorage.setItem(POS_CACHE_KEY, JSON.stringify(nextBookings));
+      notifyBusinessBrainChanged();
       if (data.session?.refreshToken) {
         localStorage.setItem(POS_SESSION_KEY, JSON.stringify({
           email: data.session.email || session.email || '',
@@ -246,6 +248,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onNavigate }) => {
       }
       setInsights(data);
       localStorage.setItem('wyp_facebook_insights_summary', JSON.stringify(data));
+      notifyBusinessBrainChanged();
       showToast('Facebook Insights idea ၃ ခု update ပြီးပါပြီ။');
     } catch (error: any) {
       showToast(error?.message || 'Facebook Insights ဆွဲရာတွင် အခက်အခဲရှိနေပါသည်။');

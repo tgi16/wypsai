@@ -5,12 +5,16 @@ import {
   BrainCircuit,
   BriefcaseBusiness,
   Check,
+  Cloud,
   Copy,
+  Database,
+  HardDrive,
   ListChecks,
   Palette,
   Send,
   Square,
   Trash2,
+  X,
 } from 'lucide-react';
 import {
   collection,
@@ -30,7 +34,7 @@ import {
 } from 'firebase/firestore';
 import { db } from '../firebase';
 import { useFirebase } from '../components/FirebaseContext';
-import { buildBusinessBrainSnapshot } from '../businessBrain';
+import { buildBusinessBrainSnapshot, BUSINESS_BRAIN_UPDATED_EVENT } from '../businessBrain';
 import {
   clearStrategyHistory,
   buildStrategyModelHistory,
@@ -154,6 +158,7 @@ const StrategyPartner: React.FC = () => {
   const [isInitializing, setIsInitializing] = useState(true);
   const [cancelNotice, setCancelNotice] = useState('');
   const [copiedMessageId, setCopiedMessageId] = useState('');
+  const [showBrainSources, setShowBrainSources] = useState(false);
   const [answerMode, setAnswerMode] = useState<StrategyAnswerMode>(() => {
     const savedMode = localStorage.getItem(STRATEGY_MODE_KEY) as StrategyAnswerMode | null;
     return ANSWER_MODES.some((mode) => mode.value === savedMode) ? savedMode! : 'general';
@@ -272,11 +277,13 @@ const StrategyPartner: React.FC = () => {
     window.addEventListener('wyps_generated_history_updated', refreshBrain);
     window.addEventListener('wyps_content_board_updated', refreshBrain);
     window.addEventListener('gemini_usage_updated', refreshBrain);
+    window.addEventListener(BUSINESS_BRAIN_UPDATED_EVENT, refreshBrain);
     return () => {
       window.removeEventListener('storage', refreshBrain);
       window.removeEventListener('wyps_generated_history_updated', refreshBrain);
       window.removeEventListener('wyps_content_board_updated', refreshBrain);
       window.removeEventListener('gemini_usage_updated', refreshBrain);
+      window.removeEventListener(BUSINESS_BRAIN_UPDATED_EVENT, refreshBrain);
     };
   }, []);
 
@@ -433,10 +440,19 @@ const StrategyPartner: React.FC = () => {
             <h2 className="truncate text-base font-black text-white sm:text-lg">Strategy Partner AI</h2>
             <div className="mt-0.5 flex items-center gap-2 overflow-hidden text-[10px] font-bold uppercase text-slate-400">
               <span className="truncate text-amber-400">{activeMode.label}</span>
-              <span className="shrink-0 rounded-full border border-emerald-500/25 bg-emerald-500/10 px-2 py-0.5 text-[9px] text-emerald-300">
+              <button
+                type="button"
+                onClick={() => setShowBrainSources((current) => !current)}
+                className="shrink-0 rounded-full border border-emerald-500/25 bg-emerald-500/10 px-2 py-0.5 text-[9px] text-emerald-300 transition-colors hover:bg-emerald-500/20"
+                aria-expanded={showBrainSources}
+                aria-label="Business Brain data sources"
+              >
                 Brain {brain.sourceCount}/{brain.totalSources}
+              </button>
+              <span className="hidden shrink-0 items-center gap-1 text-slate-500 md:flex">
+                {brain.origin === 'cloud' ? <Cloud className="h-3 w-3" /> : <HardDrive className="h-3 w-3" />}
+                {brain.origin === 'cloud' ? 'Cloud brain' : user ? 'Cloud sync' : 'Device saved'}
               </span>
-              <span className="hidden shrink-0 text-slate-500 md:inline">{user ? 'Cloud sync' : 'Device saved'}</span>
             </div>
           </div>
         </div>
@@ -450,6 +466,44 @@ const StrategyPartner: React.FC = () => {
           <Trash2 className="h-4 w-4" aria-hidden="true" />
         </button>
       </header>
+
+      {showBrainSources && (
+        <aside className="custom-scrollbar absolute right-3 top-[4.75rem] z-30 max-h-[calc(100%-5.5rem)] w-[calc(100%-1.5rem)] max-w-sm overflow-y-auto rounded-xl border border-slate-700 bg-slate-900 p-4 shadow-2xl shadow-black/50 sm:right-5" aria-label="Business Brain source health">
+          <div className="mb-3 flex items-start justify-between gap-3">
+            <div className="flex min-w-0 items-start gap-2.5">
+              <Database className="mt-0.5 h-4 w-4 shrink-0 text-amber-400" aria-hidden="true" />
+              <div>
+                <h3 className="text-sm font-black text-white">Business Brain Sources</h3>
+                <p className="mt-1 text-[10px] leading-relaxed text-slate-400">
+                  {brain.origin === 'cloud' ? `Cloud snapshot · ${brain.cloudAgeHours || 0}h ago` : user ? 'ဒီ device data ကို private cloud နဲ့ sync လုပ်ထားပါတယ်' : 'ဒီ device မှာပဲ သိမ်းထားပါတယ်'}
+                </p>
+              </div>
+            </div>
+            <button type="button" onClick={() => setShowBrainSources(false)} className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-slate-400 hover:bg-slate-800 hover:text-white" title="Close" aria-label="Close source health">
+              <X className="h-4 w-4" aria-hidden="true" />
+            </button>
+          </div>
+          <div className="space-y-1.5">
+            {brain.sources.map((source) => (
+              <div key={source.id} className="flex items-center justify-between gap-3 rounded-lg border border-slate-800 bg-slate-950/70 px-3 py-2">
+                <div className="min-w-0">
+                  <p className="truncate text-xs font-bold text-slate-200">{source.label}</p>
+                  <p className="truncate text-[10px] text-slate-500">{source.detail}</p>
+                </div>
+                <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${source.available ? 'bg-emerald-400 shadow-[0_0_10px_rgba(52,211,153,0.45)]' : 'bg-slate-600'}`} title={source.available ? 'Available' : 'Missing'} />
+              </div>
+            ))}
+          </div>
+          {brain.sourceCount < brain.totalSources && (
+            <p className="mt-3 rounded-lg border border-amber-500/20 bg-amber-500/10 px-3 py-2 text-[10px] font-bold leading-relaxed text-amber-300">
+              Missing source ကို သက်ဆိုင်ရာ POS, Pricing, Content သို့မဟုတ် Dashboard စာမျက်နှာမှာ sync လုပ်ပါ။ AI က missing data ကို zero လို့မယူပါ။
+            </p>
+          )}
+          {!user && (
+            <button type="button" onClick={() => login()} className="mt-3 w-full rounded-lg bg-amber-500 px-4 py-2 text-xs font-black text-slate-950 hover:bg-amber-400">Login to sync devices</button>
+          )}
+        </aside>
+      )}
 
       <div className="custom-scrollbar burmese-text min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain px-3 py-4 sm:px-5 lg:px-7">
         {!user && messages.length > 1 && (

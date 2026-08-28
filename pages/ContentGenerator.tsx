@@ -7,7 +7,7 @@ import imageCompression from 'browser-image-compression';
 import { formatMarketingContent, saveGeneratedHistory } from '../generatedHistory';
 import { saveApprovalItem } from '../workflowBoard';
 import { getAuthorizedJsonHeaders } from '../apiClient';
-import { buildBusinessBrainSnapshot } from '../businessBrain';
+import { buildBusinessBrainSnapshot, BUSINESS_BRAIN_UPDATED_EVENT, notifyBusinessBrainChanged } from '../businessBrain';
 
 interface ContentHistory {
   id: string;
@@ -433,10 +433,12 @@ const ContentGenerator: React.FC<ContentGeneratorProps> = ({ onNavigate }) => {
     window.addEventListener('storage', refreshBrain);
     window.addEventListener('wyps_generated_history_updated', refreshBrain);
     window.addEventListener('wyps_content_board_updated', refreshBrain);
+    window.addEventListener(BUSINESS_BRAIN_UPDATED_EVENT, refreshBrain);
     return () => {
       window.removeEventListener('storage', refreshBrain);
       window.removeEventListener('wyps_generated_history_updated', refreshBrain);
       window.removeEventListener('wyps_content_board_updated', refreshBrain);
+      window.removeEventListener(BUSINESS_BRAIN_UPDATED_EVENT, refreshBrain);
     };
   }, []);
 
@@ -459,6 +461,7 @@ const ContentGenerator: React.FC<ContentGeneratorProps> = ({ onNavigate }) => {
     const updatedHistory = [newEntry, ...history].slice(0, 20);
     setHistory(updatedHistory);
     localStorage.setItem('wyp_content_history', JSON.stringify(updatedHistory));
+    notifyBusinessBrainChanged();
     saveGeneratedHistory({
       type: 'Content',
       title: topicText?.trim()?.slice(0, 90) || 'Facebook / TikTok Content',
@@ -479,6 +482,7 @@ const ContentGenerator: React.FC<ContentGeneratorProps> = ({ onNavigate }) => {
     const updated = history.filter(h => h.id !== id);
     setHistory(updated);
     localStorage.setItem('wyp_content_history', JSON.stringify(updated));
+    notifyBusinessBrainChanged();
   };
 
   const handleTokenChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -669,6 +673,7 @@ const ContentGenerator: React.FC<ContentGeneratorProps> = ({ onNavigate }) => {
       }
       setInsights(data);
       localStorage.setItem('wyp_facebook_insights_summary', JSON.stringify(data));
+      notifyBusinessBrainChanged();
       setToastMsg('Sai Lao Insights ကို update လုပ်ပြီးပါပြီ။');
       setTimeout(() => setToastMsg(''), 3000);
     } catch (error: any) {
@@ -683,6 +688,7 @@ const ContentGenerator: React.FC<ContentGeneratorProps> = ({ onNavigate }) => {
   const clearFacebookInsights = () => {
     setInsights(null);
     localStorage.removeItem('wyp_facebook_insights_summary');
+    notifyBusinessBrainChanged();
     setToastMsg('Facebook Insights ကို Clear လုပ်ပြီးပါပြီ။ မလိုသေးရင် မပေါ်တော့ပါ။');
     setTimeout(() => setToastMsg(''), 3000);
   };

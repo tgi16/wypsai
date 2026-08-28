@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { buildBusinessBrainSnapshot } from '../businessBrain';
+import { buildBusinessBrainSnapshot, BUSINESS_BRAIN_CLOUD_KEY } from '../businessBrain';
 
 const storageReader = (values: Record<string, unknown>) => (key: string) => (
   key in values ? JSON.stringify(values[key]) : null
@@ -45,6 +45,8 @@ test('Business Brain summarizes operations without leaking secret fields', () =>
   assert.equal(snapshot.metrics.upcomingSevenDays, 1);
   assert.equal(snapshot.metrics.outstandingBalance, 125000);
   assert.equal(snapshot.metrics.pendingContent, 1);
+  assert.equal(snapshot.origin, 'device');
+  assert.equal(snapshot.sources.find((source) => source.id === 'bookings')?.available, true);
   assert.match(snapshot.context, /Outdoor Couple/);
   assert.match(snapshot.context, /Recent openings to avoid repeating/);
   assert.doesNotMatch(snapshot.context, /09123456789/);
@@ -58,5 +60,23 @@ test('Business Brain treats missing data as unavailable instead of inventing act
   assert.equal(snapshot.sourceCount, 0);
   assert.equal(snapshot.metrics.bookings, 0);
   assert.match(snapshot.context, /Missing data means unknown/);
-  assert.match(snapshot.context, /no cached bookings/i);
+  assert.match(snapshot.context, /bookings are not synced/i);
+  assert.equal(snapshot.sources.every((source) => !source.available), true);
+});
+
+test('Business Brain uses a newer, more complete private cloud snapshot across devices', () => {
+  const cloudTime = new Date('2026-08-25T10:00:00+06:30');
+  const cloudSnapshot = buildBusinessBrainSnapshot('strategy', storageReader({
+    wyps_pos_bookings_cache_v1: [{ id: 'b1', packageName: 'Outdoor Couple', date: '2026-08-26' }],
+    wyps_content_approval_board_v1: [{ status: 'Ready' }],
+    wyps_pos_package_catalog_v1: { packages: [{ name: 'Outdoor Couple', category: 'Outdoor', price: 250000 }] },
+  }), cloudTime, false);
+  const phoneSnapshot = buildBusinessBrainSnapshot('strategy', storageReader({
+    [BUSINESS_BRAIN_CLOUD_KEY]: cloudSnapshot,
+  }), new Date('2026-08-25T12:00:00+06:30'));
+
+  assert.equal(phoneSnapshot.origin, 'cloud');
+  assert.equal(phoneSnapshot.sourceCount, 3);
+  assert.equal(phoneSnapshot.cloudAgeHours, 2);
+  assert.match(phoneSnapshot.context, /private cloud snapshot/i);
 });

@@ -61,3 +61,19 @@ test('Gemini request sanitizer rejects unknown models and caps output tokens', (
   assert.equal(sanitized.config.maxOutputTokens, 8192);
   assert.equal('unsupported' in sanitized.config, false);
 });
+
+test('Gemini request sanitizer only allows the Google Search grounding tool', () => {
+  const allowed = sanitizeGeminiRequest({
+    model: 'gemini-2.5-pro',
+    contents: { parts: [{ text: 'latest platform policy' }] },
+    config: { tools: [{ googleSearch: {} }] },
+  });
+  assert.deepEqual(allowed.config.tools, [{ googleSearch: {} }]);
+
+  const rejected = sanitizeGeminiRequest({
+    model: 'gemini-2.5-pro',
+    contents: { parts: [{ text: 'run a function' }] },
+    config: { tools: [{ functionDeclarations: [{ name: 'dangerous' }] }] },
+  });
+  assert.deepEqual(rejected.config.tools, []);
+});

@@ -1,16 +1,22 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { createStrategyChat } from '../geminiService';
+import { createStrategyChat, extractStrategyMemories } from '../geminiService';
 import ReactMarkdown from 'react-markdown';
 import {
   BrainCircuit,
+  BookMarked,
   BriefcaseBusiness,
   Check,
   Cloud,
   Copy,
   Database,
+  FileText,
+  Globe2,
   HardDrive,
+  LoaderCircle,
   ListChecks,
   Palette,
+  Paperclip,
+  Plus,
   Send,
   Square,
   Trash2,
@@ -44,6 +50,20 @@ import {
   StrategyMessage,
   writeStrategyHistory,
 } from '../strategyHistory';
+import {
+  buildStrategyMemoryContext,
+  containsSensitiveStrategyMemory,
+  readStrategyMemories,
+  removeStrategyMemory,
+  STRATEGY_MEMORY_UPDATED_EVENT,
+  upsertStrategyMemories,
+} from '../strategyMemory';
+import {
+  prepareStrategyAttachment,
+  PreparedStrategyAttachment,
+  releaseStrategyAttachment,
+  STRATEGY_ATTACHMENT_ACCEPT,
+} from '../strategyAttachment';
 
 type Message = StrategyMessage;
 
@@ -78,6 +98,7 @@ const ANSWER_MODES: Array<{
 ];
 
 const STRATEGY_MODE_KEY = 'wyps_strategy_answer_mode_v1';
+const STRATEGY_SEARCH_KEY = 'wyps_strategy_live_search_v1';
 
 const chatIdFor = (uid: string) => `${uid}_strategy`;
 
@@ -159,6 +180,12 @@ const StrategyPartner: React.FC = () => {
   const [cancelNotice, setCancelNotice] = useState('');
   const [copiedMessageId, setCopiedMessageId] = useState('');
   const [showBrainSources, setShowBrainSources] = useState(false);
+  const [showMemory, setShowMemory] = useState(false);
+  const [memoryInput, setMemoryInput] = useState('');
+  const [memories, setMemories] = useState(() => readStrategyMemories(user?.uid));
+  const [liveSearch, setLiveSearch] = useState(() => localStorage.getItem(STRATEGY_SEARCH_KEY) !== 'false');
+  const [attachment, setAttachment] = useState<PreparedStrategyAttachment | null>(null);
+  const [isPreparingAttachment, setIsPreparingAttachment] = useState(false);
   const [answerMode, setAnswerMode] = useState<StrategyAnswerMode>(() => {
     const savedMode = localStorage.getItem(STRATEGY_MODE_KEY) as StrategyAnswerMode | null;
     return ANSWER_MODES.some((mode) => mode.value === savedMode) ? savedMode! : 'general';
@@ -166,7 +193,8 @@ const StrategyPartner: React.FC = () => {
   const [brain, setBrain] = useState(() => buildBusinessBrainSnapshot('strategy'));
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
-  const activeRequestRef = useRef<{ controller: AbortController; message: Message } | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const activeRequestRef = useRef<{ controller: AbortController; message: Message; originalInput: string } | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -232,6 +260,17 @@ const StrategyPartner: React.FC = () => {
     };
   }, [user]);
 
+  useEffect(() => {
+    const refreshMemory = () => setMemories(readStrategyMemories(user?.uid));
+    refreshMemory();
+    window.addEventListener(STRATEGY_MEMORY_UPDATED_EVENT, refreshMemory);
+    window.addEventListener('storage', refreshMemory);
+    return () => {
+      window.removeEventListener(STRATEGY_MEMORY_UPDATED_EVENT, refreshMemory);
+      window.removeEventListener('storage', refreshMemory);
+    };
+  }, [user]);
+
   const clearHistory = async () => {
     if (window.confirm('ဆွေးနွေးထားသမျှကို ဖျက်ပစ်မှာ သေချာပါသလား?')) {
       activeRequestRef.current?.controller.abort();
@@ -271,6 +310,8 @@ const StrategyPartner: React.FC = () => {
     activeRequestRef.current?.controller.abort();
   }, []);
 
+  useEffect(() => () => releaseStrategyAttachment(attachment), [attachment]);
+
   useEffect(() => {
     const refreshBrain = () => setBrain(buildBusinessBrainSnapshot('strategy'));
     window.addEventListener('storage', refreshBrain);
@@ -296,6 +337,52 @@ const StrategyPartner: React.FC = () => {
     setAnswerMode(mode);
     localStorage.setItem(STRATEGY_MODE_KEY, mode);
     inputRef.current?.focus();
+  };
+
+  const toggleLiveSearch = () => {
+    setLiveSearch((current) => {
+      const next = !current;
+      localStorage.setItem(STRATEGY_SEARCH_KEY, String(next));
+      return next;
+    });
+    inputRef.current?.focus();
+  };
+
+  const addManualMemory = () => {
+    const detail = memoryInput.trim();
+    if (!detail) return;
+    if (containsSensitiveStrategyMemory(detail)) {
+      setCancelNotice('Password, token, phone သို့မဟုတ် email ကို Long-Term Memory ထဲမသိမ်းပါ။');
+      window.setTimeout(() => setCancelNotice(''), 4000);
+      return;
+    }
+    const next = upsertStrategyMemories([{
+      category: 'fact',
+      title: detail.split(/[။.!?\n]/)[0].trim().slice(0, 80) || 'Saved memory',
+      detail: detail.slice(0, 600),
+    }], user?.uid);
+    setMemories(next);
+    setMemoryInput('');
+  };
+
+  const deleteMemory = (id: string) => {
+    setMemories(removeStrategyMemory(id, user?.uid));
+  };
+
+  const handleAttachmentChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file) return;
+    setIsPreparingAttachment(true);
+    setCancelNotice('');
+    try {
+      setAttachment(await prepareStrategyAttachment(file));
+    } catch (error: any) {
+      setCancelNotice(error?.message || 'File ကိုပြင်ဆင်လို့မရပါ။');
+      window.setTimeout(() => setCancelNotice(''), 4000);
+    } finally {
+      setIsPreparingAttachment(false);
+    }
   };
 
   const copyMessage = async (message: Message) => {
@@ -332,7 +419,7 @@ const StrategyPartner: React.FC = () => {
       void deleteDoc(doc(chatMessagesFor(user.uid), activeRequest.message.id))
         .catch((error) => console.error('Error removing canceled Strategy message:', error));
     }
-    setInput((current) => current.trim() ? current : activeRequest.message.content);
+    setInput((current) => current.trim() ? current : activeRequest.originalInput);
     setIsLoading(false);
     setCancelNotice('ပို့ထားတာကို Cancel လုပ်ပြီး စာကိုပြန်ထည့်ပေးထားပါတယ်။');
     setTimeout(() => setCancelNotice(''), 3000);
@@ -340,17 +427,18 @@ const StrategyPartner: React.FC = () => {
 
   const handleSubmit = async (e?: React.FormEvent, overrideInput?: string) => {
     if (e) e.preventDefault();
-    const finalInput = overrideInput || input;
-    if (!finalInput.trim() || isInitializing || isLoading) return;
+    const finalInput = (overrideInput || input).trim();
+    if ((!finalInput && !attachment) || isInitializing || isLoading || isPreparingAttachment) return;
 
-    const userMsg = finalInput.trim().slice(0, 30_000);
+    const userMsg = (finalInput || 'ဒီ attachment ကိုအသေးစိတ်ခွဲခြမ်းပြီး အရေးကြီးတဲ့အချက်နဲ့ လက်တွေ့အသုံးချနိုင်မယ့်အကြံပေးချက်ပေးပါ။').slice(0, 30_000);
+    const messageContent = attachment ? `${userMsg}\n\n[Attachment: ${attachment.name}]` : userMsg;
     setInput('');
     
     // Add user message to UI
     const newUserMsg: Message = {
       id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
       role: 'user',
-      content: userMsg
+      content: messageContent
     };
     
     const updatedMessages = [...messages, newUserMsg];
@@ -359,13 +447,18 @@ const StrategyPartner: React.FC = () => {
     setIsLoading(true);
     setCancelNotice('');
     const controller = new AbortController();
-    activeRequestRef.current = { controller, message: newUserMsg };
+    activeRequestRef.current = { controller, message: newUserMsg, originalInput: userMsg };
 
     try {
       const history = buildStrategyModelHistory(withoutGreeting(messages));
       const freshBrain = buildBusinessBrainSnapshot('strategy');
       setBrain(freshBrain);
-      const chatSession = createStrategyChat(history, freshBrain.context, answerMode);
+      const memoryContext = buildStrategyMemoryContext(memories);
+      const chatSession = createStrategyChat(history, freshBrain.context, answerMode, {
+        memoryContext,
+        liveSearch,
+        attachment,
+      });
       if (user) {
         await setDoc(doc(chatMessagesFor(user.uid), newUserMsg.id), {
           role: newUserMsg.role,
@@ -405,6 +498,13 @@ const StrategyPartner: React.FC = () => {
           console.error("Error saving to Firebase:", error);
         }
       }
+      setAttachment(null);
+      void extractStrategyMemories(userMsg, response.text || '', memoryContext)
+        .then((extracted) => {
+          if (!extracted.length) return;
+          setMemories(upsertStrategyMemories(extracted, user?.uid));
+        })
+        .catch((error) => console.warn('Strategy memory extraction skipped:', error));
       
     } catch (error: any) {
       if (controller.signal.aborted || error?.name === 'AbortError') return;
@@ -442,7 +542,10 @@ const StrategyPartner: React.FC = () => {
               <span className="truncate text-amber-400">{activeMode.label}</span>
               <button
                 type="button"
-                onClick={() => setShowBrainSources((current) => !current)}
+                onClick={() => {
+                  setShowBrainSources((current) => !current);
+                  setShowMemory(false);
+                }}
                 className="shrink-0 rounded-full border border-emerald-500/25 bg-emerald-500/10 px-2 py-0.5 text-[9px] text-emerald-300 transition-colors hover:bg-emerald-500/20"
                 aria-expanded={showBrainSources}
                 aria-label="Business Brain data sources"
@@ -456,15 +559,31 @@ const StrategyPartner: React.FC = () => {
             </div>
           </div>
         </div>
-        <button
-          type="button"
-          onClick={clearHistory}
-          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-slate-700 bg-slate-800 text-slate-400 transition-colors hover:border-red-400/40 hover:text-red-300"
-          title="Clear chat history"
-          aria-label="Clear chat history"
-        >
-          <Trash2 className="h-4 w-4" aria-hidden="true" />
-        </button>
+        <div className="flex shrink-0 items-center gap-1.5">
+          <button
+            type="button"
+            onClick={() => {
+              setShowMemory((current) => !current);
+              setShowBrainSources(false);
+            }}
+            className="relative flex h-10 w-10 items-center justify-center rounded-lg border border-slate-700 bg-slate-800 text-slate-400 transition-colors hover:border-amber-500/40 hover:text-amber-300"
+            title="Long-term memory"
+            aria-label="Long-term memory"
+            aria-expanded={showMemory}
+          >
+            <BookMarked className="h-4 w-4" aria-hidden="true" />
+            {memories.length > 0 && <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-amber-500 px-1 text-[8px] font-black text-slate-950">{memories.length}</span>}
+          </button>
+          <button
+            type="button"
+            onClick={clearHistory}
+            className="flex h-10 w-10 items-center justify-center rounded-lg border border-slate-700 bg-slate-800 text-slate-400 transition-colors hover:border-red-400/40 hover:text-red-300"
+            title="Clear chat history"
+            aria-label="Clear chat history"
+          >
+            <Trash2 className="h-4 w-4" aria-hidden="true" />
+          </button>
+        </div>
       </header>
 
       {showBrainSources && (
@@ -502,6 +621,52 @@ const StrategyPartner: React.FC = () => {
           {!user && (
             <button type="button" onClick={() => login()} className="mt-3 w-full rounded-lg bg-amber-500 px-4 py-2 text-xs font-black text-slate-950 hover:bg-amber-400">Login to sync devices</button>
           )}
+        </aside>
+      )}
+
+      {showMemory && (
+        <aside className="custom-scrollbar absolute right-3 top-[4.75rem] z-30 flex max-h-[calc(100%-5.5rem)] w-[calc(100%-1.5rem)] max-w-sm flex-col overflow-hidden rounded-xl border border-slate-700 bg-slate-900 shadow-2xl shadow-black/50 sm:right-5" aria-label="Long-term memory panel">
+          <div className="flex shrink-0 items-start justify-between gap-3 border-b border-slate-800 p-4">
+            <div className="flex min-w-0 items-start gap-2.5">
+              <BookMarked className="mt-0.5 h-4 w-4 shrink-0 text-amber-400" aria-hidden="true" />
+              <div>
+                <h3 className="text-sm font-black text-white">Long-Term Memory</h3>
+                <p className="mt-1 text-[10px] leading-relaxed text-slate-400">{user ? 'Private cloud sync · ' : 'Device only · '}{memories.length}/30 saved</p>
+              </div>
+            </div>
+            <button type="button" onClick={() => setShowMemory(false)} className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-slate-400 hover:bg-slate-800 hover:text-white" title="Close" aria-label="Close memory panel">
+              <X className="h-4 w-4" aria-hidden="true" />
+            </button>
+          </div>
+          <div className="custom-scrollbar min-h-0 flex-1 space-y-2 overflow-y-auto p-3">
+            {memories.length ? memories.map((memory) => (
+              <div key={memory.id} className="group flex items-start gap-2 rounded-lg border border-slate-800 bg-slate-950/70 px-3 py-2.5">
+                <div className="min-w-0 flex-1">
+                  <div className="mb-1 flex items-center gap-2">
+                    <span className="rounded bg-amber-500/10 px-1.5 py-0.5 text-[8px] font-black uppercase text-amber-300">{memory.category}</span>
+                    <p className="truncate text-xs font-bold text-slate-200">{memory.title}</p>
+                  </div>
+                  <p className="text-[10px] leading-relaxed text-slate-400">{memory.detail}</p>
+                </div>
+                <button type="button" onClick={() => deleteMemory(memory.id)} className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-slate-600 hover:bg-red-500/10 hover:text-red-300" title="Delete memory" aria-label={`Delete memory: ${memory.title}`}>
+                  <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
+                </button>
+              </div>
+            )) : (
+              <div className="rounded-lg border border-dashed border-slate-700 px-4 py-8 text-center">
+                <BookMarked className="mx-auto h-5 w-5 text-slate-600" aria-hidden="true" />
+                <p className="mt-2 text-xs font-bold text-slate-400">Memory မရှိသေးပါ</p>
+              </div>
+            )}
+          </div>
+          <div className="shrink-0 border-t border-slate-800 p-3">
+            <div className="flex gap-2">
+              <input value={memoryInput} onChange={(event) => setMemoryInput(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') addManualMemory(); }} maxLength={600} placeholder="မှတ်ထားချင်တာ..." className="min-w-0 flex-1 rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-xs text-white focus:border-amber-500 focus:outline-none" />
+              <button type="button" onClick={addManualMemory} disabled={!memoryInput.trim()} className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-amber-500 text-slate-950 hover:bg-amber-400 disabled:bg-slate-700 disabled:text-slate-500" title="Add memory" aria-label="Add memory">
+                <Plus className="h-4 w-4" aria-hidden="true" />
+              </button>
+            </div>
+          </div>
         </aside>
       )}
 
@@ -576,6 +741,16 @@ const StrategyPartner: React.FC = () => {
               </button>
             );
           })}
+          <button
+            type="button"
+            onClick={toggleLiveSearch}
+            aria-pressed={liveSearch}
+            className={`flex h-9 shrink-0 items-center gap-1.5 rounded-lg border px-3 text-[11px] font-black transition-colors ${liveSearch ? 'border-sky-400/60 bg-sky-500/15 text-sky-300' : 'border-slate-700 bg-slate-800 text-slate-400 hover:text-white'}`}
+            title="Live Google Search"
+          >
+            <Globe2 className="h-3.5 w-3.5" aria-hidden="true" />
+            Search {liveSearch ? 'On' : 'Off'}
+          </button>
         </div>
 
         <div className="hide-scrollbar mb-2 flex gap-1.5 overflow-x-auto pb-1">
@@ -586,7 +761,28 @@ const StrategyPartner: React.FC = () => {
           ))}
         </div>
 
+        {attachment && (
+          <div className="mb-2 flex items-center gap-2 rounded-lg border border-slate-700 bg-slate-950/70 p-2">
+            {attachment.previewUrl ? (
+              <img src={attachment.previewUrl} alt="Attached preview" className="h-11 w-11 shrink-0 rounded-md object-cover" />
+            ) : (
+              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-md bg-slate-800 text-slate-400"><FileText className="h-5 w-5" aria-hidden="true" /></div>
+            )}
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-xs font-bold text-slate-200">{attachment.name}</p>
+              <p className="mt-0.5 text-[9px] uppercase text-slate-500">{attachment.mimeType} · {(attachment.size / 1024 / 1024).toFixed(2)} MB</p>
+            </div>
+            <button type="button" onClick={() => setAttachment(null)} className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-slate-500 hover:bg-red-500/10 hover:text-red-300" title="Remove attachment" aria-label="Remove attachment">
+              <X className="h-4 w-4" aria-hidden="true" />
+            </button>
+          </div>
+        )}
+
         <form onSubmit={handleSubmit} className="flex items-end gap-2">
+          <input ref={fileInputRef} type="file" accept={STRATEGY_ATTACHMENT_ACCEPT} onChange={handleAttachmentChange} className="hidden" aria-label="Choose image or file" />
+          <button type="button" onClick={() => fileInputRef.current?.click()} disabled={isLoading || isPreparingAttachment} className="flex h-[52px] w-[52px] shrink-0 items-center justify-center rounded-xl border border-slate-700 bg-slate-800 text-slate-400 transition-colors hover:border-amber-500/50 hover:text-amber-300 disabled:text-slate-600" title="Attach image, PDF, TXT, or CSV" aria-label="Attach image or file">
+            {isPreparingAttachment ? <LoaderCircle className="h-5 w-5 animate-spin" aria-hidden="true" /> : <Paperclip className="h-5 w-5" aria-hidden="true" />}
+          </button>
           <textarea
             ref={inputRef}
             value={input}
@@ -596,14 +792,14 @@ const StrategyPartner: React.FC = () => {
             maxLength={30000}
             rows={1}
             className="burmese-text min-h-[52px] max-h-36 flex-1 resize-none overflow-y-auto rounded-xl border border-slate-700 bg-slate-950 px-4 py-3 text-white transition-all focus:border-amber-500 focus:outline-none focus:ring-1 focus:ring-amber-500"
-            disabled={isLoading || isInitializing}
+            disabled={isLoading || isInitializing || isPreparingAttachment}
           />
           {isLoading ? (
             <button type="button" onClick={cancelActiveRequest} className="flex h-[52px] w-[52px] shrink-0 items-center justify-center rounded-xl border border-red-400/30 bg-red-500/10 text-red-300 transition-colors hover:bg-red-500 hover:text-white" title="Cancel response" aria-label="Cancel response">
               <Square className="h-4 w-4 fill-current" aria-hidden="true" />
             </button>
           ) : (
-            <button type="submit" disabled={!input.trim() || isInitializing} className="flex h-[52px] w-[52px] shrink-0 items-center justify-center rounded-xl bg-amber-500 text-slate-950 transition-colors hover:bg-amber-400 disabled:bg-slate-700 disabled:text-slate-500" title="Send message" aria-label="Send message">
+            <button type="submit" disabled={(!input.trim() && !attachment) || isInitializing || isPreparingAttachment} className="flex h-[52px] w-[52px] shrink-0 items-center justify-center rounded-xl bg-amber-500 text-slate-950 transition-colors hover:bg-amber-400 disabled:bg-slate-700 disabled:text-slate-500" title="Send message" aria-label="Send message">
               <Send className="h-5 w-5" aria-hidden="true" />
             </button>
           )}

@@ -16,8 +16,9 @@ const ALLOWED_CONFIG_KEYS = new Set([
   'topP',
   'topK',
   'maxOutputTokens',
+  'tools',
 ]);
-const MAX_CONTENT_BYTES = 8 * 1024 * 1024;
+const MAX_CONTENT_BYTES = 4 * 1024 * 1024;
 const MAX_CONFIG_BYTES = 180 * 1024;
 const MAX_OUTPUT_TOKENS = 8192;
 const MINUTE_LIMIT = 20;
@@ -164,6 +165,17 @@ export const sanitizeGeminiRequest = (body = {}) => {
   const config = Object.fromEntries(
     Object.entries(rawConfig).filter(([key]) => ALLOWED_CONFIG_KEYS.has(key))
   );
+  if ('tools' in config) {
+    const googleSearchEnabled = Array.isArray(config.tools) && config.tools.some((tool) => (
+      tool
+      && typeof tool === 'object'
+      && Object.keys(tool).length === 1
+      && tool.googleSearch
+      && typeof tool.googleSearch === 'object'
+      && Object.keys(tool.googleSearch).length === 0
+    ));
+    config.tools = googleSearchEnabled ? [{ googleSearch: {} }] : [];
+  }
   config.maxOutputTokens = Math.min(
     MAX_OUTPUT_TOKENS,
     Math.max(256, Number(config.maxOutputTokens) || MAX_OUTPUT_TOKENS)

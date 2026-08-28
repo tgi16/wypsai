@@ -11,6 +11,14 @@ import {
   BusinessBrainSnapshot,
   persistBusinessBrainCloudSnapshot,
 } from '../businessBrain';
+import {
+  clearStrategyMemories,
+  mergeStrategyMemories,
+  readStrategyMemories,
+  STRATEGY_MEMORY_UPDATED_EVENT,
+  StrategyMemory,
+  writeStrategyMemories,
+} from '../strategyMemory';
 
 const FAVORITES_KEY = 'wyps_saved_library_favorites_v1';
 const MIGRATION_KEY_PREFIX = 'wyps_firestore_sync_migrated_v2_';
@@ -110,6 +118,7 @@ const FirestoreSync: React.FC<{ user: User | null }> = ({ user }) => {
     const approvalsRef = collection(userRef, 'wyps_approvals');
     const settingsRef = doc(userRef, 'wyps_settings', 'library');
     const brainRef = doc(userRef, 'wyps_settings', 'business_brain');
+    const memoryRef = doc(userRef, 'wyps_settings', 'strategy_memory');
     let lastBrainFingerprint = '';
 
     const brainFingerprint = (snapshot: BusinessBrainSnapshot) => JSON.stringify({
@@ -185,9 +194,40 @@ const FirestoreSync: React.FC<{ user: User | null }> = ({ user }) => {
       void syncLocalBrain().catch((error) => console.error('Firestore Business Brain sync failed:', error));
     };
 
+    const onStrategyMemoryUpdate = (event: Event) => {
+      const detail = (event as CustomEvent).detail || {};
+      if (detail.action === 'remote') return;
+      void setDoc(memoryRef, {
+        uid: user.uid,
+        memories: readStrategyMemories(user.uid),
+        updatedAt: serverTimestamp(),
+      }).catch((error) => console.error('Firestore Strategy memory save failed:', error));
+    };
+
+    const syncInitialMemory = async () => {
+      const remoteMemory = await getDoc(memoryRef);
+      const remoteMemories = Array.isArray(remoteMemory.data()?.memories)
+        ? remoteMemory.data()!.memories as StrategyMemory[]
+        : [];
+      const localMemories = readStrategyMemories(user.uid);
+      const anonymousMemories = readStrategyMemories();
+      const mergedMemories = mergeStrategyMemories(remoteMemories, localMemories, anonymousMemories);
+      writeStrategyMemories(mergedMemories, user.uid, { action: 'remote' });
+      if (anonymousMemories.length) clearStrategyMemories(undefined, false);
+
+      if (JSON.stringify(mergedMemories) !== JSON.stringify(remoteMemories)) {
+        await setDoc(memoryRef, {
+          uid: user.uid,
+          memories: mergedMemories,
+          updatedAt: serverTimestamp(),
+        });
+      }
+    };
+
     const start = async () => {
       try {
         await syncInitialData(user);
+        await syncInitialMemory();
         const remoteBrain = await getDoc(brainRef);
         const remoteSnapshot = remoteBrain.data()?.snapshot as BusinessBrainSnapshot | undefined;
         if (remoteSnapshot?.generatedAt && Array.isArray(remoteSnapshot.sources)) {
@@ -225,6 +265,14 @@ const FirestoreSync: React.FC<{ user: User | null }> = ({ user }) => {
         persistBusinessBrainCloudSnapshot(remoteSnapshot);
       }, (error) => console.error('Firestore Business Brain listener failed:', error));
 
+      const unsubscribeMemory = onSnapshot(memoryRef, (snapshot) => {
+        if (!active || !snapshot.exists()) return;
+        const memories = Array.isArray(snapshot.data()?.memories)
+          ? snapshot.data()!.memories as StrategyMemory[]
+          : [];
+        writeStrategyMemories(memories, user.uid, { action: 'remote' });
+      }, (error) => console.error('Firestore Strategy memory listener failed:', error));
+
       window.addEventListener('wyps_generated_history_updated', onHistoryUpdate);
       window.addEventListener('wyps_content_board_updated', onApprovalUpdate);
       window.addEventListener('wyps_saved_library_favorites_updated', onFavoritesUpdate);
@@ -232,12 +280,14 @@ const FirestoreSync: React.FC<{ user: User | null }> = ({ user }) => {
       window.addEventListener('wyps_content_board_updated', onBusinessBrainUpdate);
       window.addEventListener(BUSINESS_BRAIN_UPDATED_EVENT, onBusinessBrainUpdate);
       window.addEventListener('gemini_usage_updated', onBusinessBrainUpdate);
+      window.addEventListener(STRATEGY_MEMORY_UPDATED_EVENT, onStrategyMemoryUpdate);
       void syncLocalBrain().catch((error) => console.error('Firestore Business Brain initial save failed:', error));
       stopListeners = () => {
         unsubscribeHistory();
         unsubscribeApprovals();
         unsubscribeSettings();
         unsubscribeBrain();
+        unsubscribeMemory();
         window.removeEventListener('wyps_generated_history_updated', onHistoryUpdate);
         window.removeEventListener('wyps_content_board_updated', onApprovalUpdate);
         window.removeEventListener('wyps_saved_library_favorites_updated', onFavoritesUpdate);
@@ -245,6 +295,7 @@ const FirestoreSync: React.FC<{ user: User | null }> = ({ user }) => {
         window.removeEventListener('wyps_content_board_updated', onBusinessBrainUpdate);
         window.removeEventListener(BUSINESS_BRAIN_UPDATED_EVENT, onBusinessBrainUpdate);
         window.removeEventListener('gemini_usage_updated', onBusinessBrainUpdate);
+        window.removeEventListener(STRATEGY_MEMORY_UPDATED_EVENT, onStrategyMemoryUpdate);
       };
     };
 

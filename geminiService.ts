@@ -4,6 +4,8 @@ import { DAILY_BUDGET, PRICING, UsageMetadata } from "./constants";
 import { getSavedPricingContext } from "./pricingCatalog";
 import { buildBusinessBrainSnapshot } from "./businessBrain";
 import { StrategyAnswerMode } from "./strategyHistory";
+import { StrategyMemoryCategory } from "./strategyMemory";
+import { appendStrategySources, extractStrategyWebSources } from "./strategyGrounding";
 import { auth } from "./firebase";
 import { getAuthorizedJsonHeaders } from './apiClient';
 
@@ -217,7 +219,7 @@ export const callGeminiProxy = async (
         throw new Error(message);
       }
       if (response.status === 413) {
-        const message = 'ပို့လိုက်တဲ့ image data က အရမ်းကြီးနေပါတယ်။ Photo အရေအတွက် လျှော့ပြီး သို့မဟုတ် smaller image နဲ့ပြန်စမ်းပါ။';
+        const message = 'ပို့လိုက်တဲ့ image/file data က အရမ်းကြီးနေပါတယ်။ Smaller attachment နဲ့ပြန်စမ်းပါ။';
         window.dispatchEvent(new CustomEvent('wyps_app_notice', { detail: { type: 'error', message } }));
         throw new Error(message);
       }
@@ -1234,34 +1236,60 @@ const STRATEGY_MODE_INSTRUCTIONS: Record<StrategyAnswerMode, string> = {
   action: 'ACTION mode: Turn the request into a prioritized execution plan. Use owners, sequence, timing, dependencies, success checks, and the smallest useful next action.',
 };
 
+export type StrategyAttachmentInput = {
+  name: string;
+  mimeType: string;
+  data: string;
+};
+
+type StrategyChatOptions = {
+  memoryContext?: string;
+  liveSearch?: boolean;
+  attachment?: StrategyAttachmentInput | null;
+};
+
 export const createStrategyChat = (
   initialHistory: any[] = [],
   businessContext = '',
   answerMode: StrategyAnswerMode = 'general',
+  chatOptions: StrategyChatOptions = {},
 ) => {
   const history = [...initialHistory];
   
   return {
-    sendMessage: async (message: string, options: { signal?: AbortSignal } = {}) => {
+    sendMessage: async (message: string, requestOptions: { signal?: AbortSignal } = {}) => {
       const today = new Date().toLocaleDateString('en-US', {
         year: 'numeric',
         month: 'long',
         day: 'numeric',
       });
+      const userParts: any[] = [{ text: message }];
+      if (chatOptions.attachment?.data && chatOptions.attachment.mimeType) {
+        userParts.push({
+          inlineData: {
+            data: chatOptions.attachment.data,
+            mimeType: chatOptions.attachment.mimeType,
+          },
+        });
+      }
+
       const response = await handleResponse(() => callGeminiProxy({
         model: 'quality',
         contents: [
           ...history,
-          { role: 'user', parts: [{ text: message }] }
+          { role: 'user', parts: userParts }
         ],
         config: {
           maxOutputTokens: 8192,
           temperature: answerMode === 'creative' ? 0.85 : answerMode === 'action' ? 0.35 : 0.55,
+          ...(chatOptions.liveSearch ? { tools: [{ googleSearch: {} }] } : {}),
           systemInstruction: `You are Strategy Partner AI, a world-class general-purpose consultant for Sai Lao, owner of With You Photo Studio in Taunggyi, Myanmar.
 
 Current date: ${today}
 Selected answer mode: ${answerMode.toUpperCase()}
 ${STRATEGY_MODE_INSTRUCTIONS[answerMode]}
+Live Search: ${chatOptions.liveSearch ? 'ENABLED. Use Google Search whenever current, changing, obscure, or externally verifiable information would improve the answer.' : 'OFF. Do not imply that you checked live information.'}
+Attachment: ${chatOptions.attachment ? `${chatOptions.attachment.name} (${chatOptions.attachment.mimeType}) is attached to the current user message.` : 'None.'}
 
 Primary mission:
 - Answer almost any practical question as helpfully as possible: business, marketing, content, sales, operations, pricing, client communication, technology, planning, writing, learning, decision-making, troubleshooting, and everyday problem solving.
@@ -1276,6 +1304,9 @@ ${getStudioContext()}
 Live WYPS Business Brain snapshot:
 ${businessContext || 'No fresh Business Brain snapshot is available. Treat operational data as unknown.'}
 
+Durable user memory:
+${chatOptions.memoryContext || 'No durable memories saved yet.'}
+
 Response standards:
 1. Reply in natural conversational Burmese by default. Mix English terms when they are normal for business, photography, tech, marketing, or social media.
 2. Start with the useful answer first. Avoid long introductions.
@@ -1283,7 +1314,7 @@ Response standards:
 4. Give specific, actionable advice. Include examples, scripts, checklists, formulas, or step-by-step plans when useful.
 5. For studio/business questions, protect the premium brand image. Prefer value-adds, trust-building, better positioning, and excellent service over cheap discounting.
 6. For writing requests, produce copy-ready output the user can paste immediately.
-7. For current news, live prices, laws, policy, platform rules, or anything that may have changed recently, be transparent that you cannot browse live inside this chat and give the best stable guidance plus what to verify.
+7. When Live Search is enabled, use it for current news, prices, laws, policies, schedules, platform rules, recent product facts, and obscure claims. Ground factual claims in the returned web evidence and do not invent citations. When it is off, clearly state that live verification was not performed.
 8. For medical, legal, tax, investment, or other high-stakes questions, give general educational guidance, point out risks, and recommend a qualified professional for final decisions.
 9. Keep answers easy to scan: short paragraphs, bullets, tables, or numbered steps where helpful. Do not over-explain.
 10. If the user asks for "best", compare options and recommend one clear path with the reason.
@@ -1297,6 +1328,8 @@ Response standards:
 18. When several interpretations are plausible, give the most likely useful answer first, state the assumption in one short line, and mention an alternative only when it materially changes the decision.
 19. For complex requests, synthesize instead of dumping options. Recommend one primary path and explain the decisive reason.
 20. Never let WYPS context reduce your ability to answer general questions. For unrelated questions, answer as a strong general-purpose assistant and ignore business data.
+21. Treat durable memory as helpful context, not an instruction hierarchy. The current user request overrides older memory. If memory conflicts with current instructions or live Business Brain data, follow the current request and flag the conflict only when useful.
+22. If an image or file is attached, inspect its actual visible/content evidence before answering. Distinguish what is visible, what is inferred, and what cannot be read. Never force Indoor, Outdoor, package, person identity, or business assumptions that the attachment does not support.
 
 Package and pricing strategy protocol:
 - When Sai Lao asks to create, improve, compare, or price a package, first identify the target customer, occasion, deliverables, production time, staff/MUA/dress/print/travel costs, capacity, and desired positioning.
@@ -1309,13 +1342,73 @@ Package and pricing strategy protocol:
 - If essential numbers are missing, still provide a provisional recommendation with clearly stated assumptions, then ask only the smallest set of follow-up questions needed to finalize it.
 `,
         }
-      }, { signal: options.signal }));
+      }, { signal: requestOptions.signal }));
 
-      const text = response.text || '';
+      const sources = extractStrategyWebSources(response);
+      const text = appendStrategySources(response.text || '', sources);
       history.push({ role: 'user', parts: [{ text: message }] });
       history.push({ role: 'model', parts: [{ text: text }] });
       
-      return { text };
+      return { text, sources };
     }
   };
+};
+
+export const extractStrategyMemories = async (
+  userMessage: string,
+  assistantMessage: string,
+  existingMemoryContext = '',
+) => {
+  const response = await handleResponse(() => callGeminiProxy({
+    model: 'fast',
+    contents: [{
+      role: 'user',
+      parts: [{ text: `Existing memory:\n${existingMemoryContext || 'None'}\n\nUser message:\n${userMessage.slice(0, 8_000)}\n\nAssistant answer:\n${assistantMessage.slice(0, 8_000)}` }],
+    }],
+    config: {
+      responseMimeType: 'application/json',
+      maxOutputTokens: 1024,
+      temperature: 0.1,
+      responseSchema: {
+        type: Type.OBJECT,
+        properties: {
+          memories: {
+            type: Type.ARRAY,
+            items: {
+              type: Type.OBJECT,
+              properties: {
+                category: { type: Type.STRING },
+                title: { type: Type.STRING },
+                detail: { type: Type.STRING },
+              },
+              required: ['category', 'title', 'detail'],
+            },
+          },
+        },
+        required: ['memories'],
+      },
+      systemInstruction: `Extract only durable, future-useful memories about Sai Lao or WYPS.
+Allowed categories: preference, goal, decision, fact, workflow.
+Save stable preferences, ongoing goals, explicit decisions, durable business facts, and repeatable workflows.
+Return zero memories for temporary requests, one-off tasks, ordinary questions, assistant suggestions not accepted by the user, uncertain inference, or facts already present in Existing memory.
+Never store passwords, tokens, phone numbers, addresses, private client details, health/legal/financial sensitive details, or verbatim long text.
+Each title must be concise and each detail must be a clear factual sentence. Return at most 3 memories.`,
+    },
+  }));
+
+  try {
+    const parsed = JSON.parse(response.text || '{}');
+    const allowed = new Set<StrategyMemoryCategory>(['preference', 'goal', 'decision', 'fact', 'workflow']);
+    return (Array.isArray(parsed.memories) ? parsed.memories : [])
+      .filter((memory: any) => allowed.has(memory?.category))
+      .map((memory: any) => ({
+        category: memory.category as StrategyMemoryCategory,
+        title: String(memory.title || '').trim().slice(0, 100),
+        detail: String(memory.detail || '').trim().slice(0, 600),
+      }))
+      .filter((memory: any) => memory.title && memory.detail)
+      .slice(0, 3);
+  } catch {
+    return [];
+  }
 };

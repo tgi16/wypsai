@@ -55,7 +55,8 @@ async function startServer() {
           }))
         },
         finishReason: c.finishReason,
-        index: c.index
+        index: c.index,
+        groundingMetadata: c.groundingMetadata,
       }));
 
       res.json({

@@ -163,7 +163,9 @@ const StrategyPartner: React.FC = () => {
             role: entry.data().role as Message['role'],
             content: String(entry.data().text || ''),
           })).filter((message) => message.content.trim());
-          const nextMessages = cloudMessages.length ? cloudMessages : (localMessages.length ? localMessages : [defaultGreeting]);
+          const latestLocalMessages = readStrategyHistory(user.uid);
+          const mergedMessages = mergeStrategyMessages(cloudMessages, latestLocalMessages);
+          const nextMessages = mergedMessages.length ? mergedMessages : (localMessages.length ? localMessages : [defaultGreeting]);
           setMessages(nextMessages);
           persistLocalMessages(nextMessages, user.uid);
           setIsInitializing(false);

@@ -57,7 +57,14 @@ const trimForStorage = (messages: StrategyMessage[]) => {
 
 export const readStrategyHistory = (
   uid?: string | null,
-  read: StorageRead = (key) => typeof localStorage === 'undefined' ? null : localStorage.getItem(key),
+  read: StorageRead = (key) => {
+    if (typeof localStorage === 'undefined') return null;
+    try {
+      return sessionStorage.getItem(key) || localStorage.getItem(key);
+    } catch {
+      return typeof sessionStorage === 'undefined' ? null : sessionStorage.getItem(key);
+    }
+  },
 ): StrategyMessage[] => {
   try {
     const raw = read(strategyHistoryKey(uid));
@@ -70,14 +77,28 @@ export const readStrategyHistory = (
 export const writeStrategyHistory = (
   messages: StrategyMessage[],
   uid?: string | null,
-  write: StorageWrite = (key, value) => localStorage.setItem(key, value),
+  write: StorageWrite = (key, value) => {
+    try {
+      localStorage.setItem(key, value);
+      sessionStorage.removeItem(key);
+    } catch {
+      sessionStorage.setItem(key, value);
+    }
+  },
 ) => {
   const trimmed = trimForStorage(messages);
-  write(strategyHistoryKey(uid), JSON.stringify(trimmed));
+  try {
+    write(strategyHistoryKey(uid), JSON.stringify(trimmed));
+  } catch {
+    // Chat submission must continue even when browser storage is unavailable.
+  }
   return trimmed;
 };
 
 export const clearStrategyHistory = (
   uid?: string | null,
-  remove: (key: string) => void = (key) => localStorage.removeItem(key),
+  remove: (key: string) => void = (key) => {
+    localStorage.removeItem(key);
+    sessionStorage.removeItem(key);
+  },
 ) => remove(strategyHistoryKey(uid));

@@ -38,3 +38,11 @@ test('Strategy history ignores invalid stored entries', () => {
 
   assert.deepEqual(restored, [{ id: 'valid', role: 'user', content: 'Keep me' }]);
 });
+
+test('Strategy history storage failures do not stop chat submission', () => {
+  const message = { id: '100-user', role: 'user' as const, content: 'Keep the UI responsive' };
+
+  assert.doesNotThrow(() => writeStrategyHistory([message], null, () => {
+    throw new Error('Storage quota exceeded');
+  }));
+});

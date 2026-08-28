@@ -13,6 +13,7 @@ export default defineConfig(({ mode }) => {
       plugins: [
         react(),
         VitePWA({
+          injectRegister: false,
           registerType: 'autoUpdate',
           includeAssets: ['wyps-icon.svg'],
           workbox: {

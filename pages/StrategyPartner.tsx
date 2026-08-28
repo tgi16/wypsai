@@ -20,12 +20,15 @@ import {
 import { db } from '../firebase';
 import { useFirebase } from '../components/FirebaseContext';
 import { buildBusinessBrainSnapshot } from '../businessBrain';
+import {
+  clearStrategyHistory,
+  mergeStrategyMessages,
+  readStrategyHistory,
+  StrategyMessage,
+  writeStrategyHistory,
+} from '../strategyHistory';
 
-interface Message {
-  id: string;
-  role: 'user' | 'model';
-  content: string;
-}
+type Message = StrategyMessage;
 
 const defaultGreeting: Message = {
   id: '1',
@@ -48,6 +51,36 @@ const QUICK_ACTIONS = [
 const chatIdFor = (uid: string) => `${uid}_strategy`;
 
 const chatMessagesFor = (uid: string) => collection(db, 'chats', chatIdFor(uid), 'messages');
+
+const withoutGreeting = (messages: Message[]) => messages.filter((message) => message.id !== defaultGreeting.id);
+
+const persistLocalMessages = (messages: Message[], uid?: string | null) => (
+  writeStrategyHistory(withoutGreeting(messages), uid)
+);
+
+const migrateLocalMessages = async (uid: string, messages: Message[]) => {
+  const localMessages = withoutGreeting(messages).slice(-160);
+  if (!localMessages.length) return;
+
+  const messagesRef = chatMessagesFor(uid);
+  const existing = await getDocs(messagesRef);
+  const existingIds = new Set(existing.docs.map((entry) => entry.id));
+  const missing = localMessages.filter((message) => !existingIds.has(message.id));
+  const startTime = Date.now() - missing.length * 1000;
+
+  for (let index = 0; index < missing.length; index += 400) {
+    const batch = writeBatch(db);
+    missing.slice(index, index + 400).forEach((message, batchIndex) => {
+      batch.set(doc(messagesRef, message.id), {
+        role: message.role,
+        text: message.content.slice(0, 30_000),
+        uid,
+        timestamp: Timestamp.fromMillis(startTime + index * 1000 + batchIndex * 1000),
+      });
+    });
+    await batch.commit();
+  }
+};
 
 const migrateLegacyChat = async (uid: string) => {
   const messagesRef = chatMessagesFor(uid);
@@ -85,7 +118,10 @@ const deleteAllChatMessages = async (uid: string) => {
 
 const StrategyPartner: React.FC = () => {
   const { user, login } = useFirebase();
-  const [messages, setMessages] = useState<Message[]>([defaultGreeting]);
+  const [messages, setMessages] = useState<Message[]>(() => {
+    const saved = readStrategyHistory(user?.uid);
+    return saved.length ? saved : [defaultGreeting];
+  });
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [isInitializing, setIsInitializing] = useState(true);
@@ -104,13 +140,20 @@ const StrategyPartner: React.FC = () => {
 
     const loadHistory = async () => {
       if (!user) {
-        setMessages([defaultGreeting]);
+        const localMessages = readStrategyHistory();
+        setMessages(localMessages.length ? localMessages : [defaultGreeting]);
         setIsInitializing(false);
         return;
       }
 
       try {
+        const cachedMessages = readStrategyHistory(user.uid);
+        const anonymousMessages = readStrategyHistory();
+        const localMessages = mergeStrategyMessages(cachedMessages, anonymousMessages);
+        if (localMessages.length) setMessages(localMessages);
         await migrateLegacyChat(user.uid);
+        await migrateLocalMessages(user.uid, localMessages);
+        if (anonymousMessages.length) clearStrategyHistory();
         if (!active) return;
         const messagesQuery = query(chatMessagesFor(user.uid), orderBy('timestamp', 'asc'), limitToLast(200));
         unsubscribe = onSnapshot(messagesQuery, (snapshot) => {
@@ -120,16 +163,23 @@ const StrategyPartner: React.FC = () => {
             role: entry.data().role as Message['role'],
             content: String(entry.data().text || ''),
           })).filter((message) => message.content.trim());
-          setMessages(cloudMessages.length ? cloudMessages : [defaultGreeting]);
+          const nextMessages = cloudMessages.length ? cloudMessages : (localMessages.length ? localMessages : [defaultGreeting]);
+          setMessages(nextMessages);
+          persistLocalMessages(nextMessages, user.uid);
           setIsInitializing(false);
         }, (error) => {
           console.error('Error listening to Strategy chat history:', error);
-          if (active) setIsInitializing(false);
+          if (active) {
+            const fallback = readStrategyHistory(user.uid);
+            setMessages(fallback.length ? fallback : (localMessages.length ? localMessages : [defaultGreeting]));
+            setIsInitializing(false);
+          }
         });
       } catch (error) {
         console.error("Error loading chat history from Firebase:", error);
         if (active) {
-          setMessages([defaultGreeting]);
+          const fallback = readStrategyHistory(user.uid);
+          setMessages(fallback.length ? fallback : [defaultGreeting]);
           setIsInitializing(false);
         }
       }
@@ -149,6 +199,8 @@ const StrategyPartner: React.FC = () => {
       setIsLoading(false);
       const resetMessages = [defaultGreeting];
       setMessages(resetMessages);
+      clearStrategyHistory(user?.uid);
+      if (!user) clearStrategyHistory();
 
       if (user) {
         try {
@@ -203,7 +255,11 @@ const StrategyPartner: React.FC = () => {
 
     activeRequest.controller.abort();
     activeRequestRef.current = null;
-    setMessages((current) => current.filter((message) => message.id !== activeRequest.message.id));
+    setMessages((current) => {
+      const next = current.filter((message) => message.id !== activeRequest.message.id);
+      persistLocalMessages(next, user?.uid);
+      return next;
+    });
     if (user) {
       void deleteDoc(doc(chatMessagesFor(user.uid), activeRequest.message.id))
         .catch((error) => console.error('Error removing canceled Strategy message:', error));
@@ -231,6 +287,7 @@ const StrategyPartner: React.FC = () => {
     
     const updatedMessages = [...messages, newUserMsg];
     setMessages(updatedMessages);
+    persistLocalMessages(updatedMessages, user?.uid);
     setIsLoading(true);
     setCancelNotice('');
     const controller = new AbortController();
@@ -266,7 +323,11 @@ const StrategyPartner: React.FC = () => {
         content: String(response.text || '').slice(0, 30_000),
       };
 
-      setMessages((current) => [...current.filter((message) => message.id !== modelMsg.id), modelMsg]);
+      setMessages((current) => {
+        const next = [...current.filter((message) => message.id !== modelMsg.id), modelMsg];
+        persistLocalMessages(next, user?.uid);
+        return next;
+      });
       if (user) {
         try {
           await setDoc(doc(chatMessagesFor(user.uid), modelMsg.id), {
@@ -288,7 +349,11 @@ const StrategyPartner: React.FC = () => {
         role: 'model',
         content: 'ဆာဗာနှင့် ချိတ်ဆက်ရာတွင် အခက်အခဲရှိနေပါသည်။ ခဏနေမှ ပြန်လည်ကြိုးစားကြည့်ပါရှင်။'
       };
-      setMessages(prev => [...prev, errorMsg]);
+      setMessages((current) => {
+        const next = [...current, errorMsg];
+        persistLocalMessages(next, user?.uid);
+        return next;
+      });
     } finally {
       if (activeRequestRef.current?.controller === controller) {
         activeRequestRef.current = null;

@@ -77,3 +77,24 @@ test('Gemini request sanitizer only allows the Google Search grounding tool', ()
   });
   assert.deepEqual(rejected.config.tools, []);
 });
+
+test('Gemini request sanitizer locks Story Book image generation configuration', () => {
+  const allowed = sanitizeGeminiRequest({
+    model: 'gemini-2.5-flash-image',
+    contents: [{ role: 'user', parts: [{ text: 'rough visual' }] }],
+    config: {
+      responseModalities: ['TEXT', 'IMAGE'],
+      imageConfig: { aspectRatio: '4:5', imageSize: '8K', unsafe: true },
+    },
+  });
+  assert.deepEqual(allowed.config.responseModalities, ['IMAGE']);
+  assert.deepEqual(allowed.config.imageConfig, { aspectRatio: '4:5' });
+
+  const nonImage = sanitizeGeminiRequest({
+    model: 'gemini-2.5-flash',
+    contents: { parts: [{ text: 'test' }] },
+    config: { responseModalities: ['IMAGE'], imageConfig: { aspectRatio: '4:5' } },
+  });
+  assert.equal('responseModalities' in nonImage.config, false);
+  assert.equal('imageConfig' in nonImage.config, false);
+});

@@ -8,6 +8,7 @@ import { StrategyMemoryCategory } from "./strategyMemory";
 import { appendStrategySources, extractStrategyWebSources } from "./strategyGrounding";
 import { auth } from "./firebase";
 import { getAuthorizedJsonHeaders } from './apiClient';
+import { StoryBookPage, StoryBookType, StoryBookVisualStyle } from './storyBook';
 
 const getUsageDayKey = () => new Date().toLocaleDateString('en-CA');
 
@@ -110,12 +111,13 @@ User Feedback History:
   }
 };
 
-type GeminiModelProfile = 'quality' | 'balanced' | 'fast' | 'tts';
+type GeminiModelProfile = 'quality' | 'balanced' | 'fast' | 'image' | 'tts';
 
 const MODEL_ROUTES: Record<GeminiModelProfile, string[]> = {
   quality: ['gemini-2.5-pro', 'gemini-2.5-flash'],
   balanced: ['gemini-2.5-flash', 'gemini-2.5-pro'],
   fast: ['gemini-2.5-flash'],
+  image: ['gemini-2.5-flash-image'],
   tts: ['gemini-2.5-flash-preview-tts'],
 };
 
@@ -983,6 +985,150 @@ export const generateConcept = async (vibe: string): Promise<string> => {
     Context: ${getStudioContext()}`,
   }));
   return response.text || '';
+};
+
+export type StoryBookPlanInput = {
+  source: string;
+  sourceLabel: string;
+  bookType: StoryBookType;
+  visualStyle: StoryBookVisualStyle;
+  pageCount: 6 | 8;
+  suggestedTitle?: string;
+  reference?: { mimeType: string; data: string } | null;
+};
+
+export type StoryBookPlan = {
+  title: string;
+  subtitle: string;
+  styleBible: string;
+  pages: Array<Pick<StoryBookPage, 'title' | 'narrative' | 'visualPrompt' | 'shotNote'>>;
+};
+
+const STORY_BOOK_PAGE_SCHEMA = {
+  type: Type.OBJECT,
+  properties: {
+    title: { type: Type.STRING },
+    narrative: { type: Type.STRING },
+    visualPrompt: { type: Type.STRING },
+    shotNote: { type: Type.STRING },
+  },
+  required: ['title', 'narrative', 'visualPrompt', 'shotNote'],
+};
+
+export const generateStoryBookPlan = async (input: StoryBookPlanInput): Promise<StoryBookPlan> => {
+  const typeDirections: Record<StoryBookType, string> = {
+    'visual-concept': 'Build a photography visual concept book: cover, mood/story, palette/outfit, location/lighting, poses, shot sequence, details, and final direction as space allows.',
+    'client-presentation': 'Build a polished client-facing concept proposal that explains the idea visually and confidently without inventing prices or package promises.',
+    'social-carousel': 'Build a visual social carousel with a clear opening hook, story progression, useful visual beats, and a soft final CTA.',
+    'strategy-book': 'Turn the source into a visual business action book: context, opportunity, core strategy, actions, execution, measures, and next decision as space allows.',
+  };
+  const styleDirections: Record<StoryBookVisualStyle, string> = {
+    cinematic: 'cinematic editorial photography, layered light, natural contrast, premium but believable',
+    'soft-editorial': 'soft editorial photography, clean natural light, gentle color, refined human emotion',
+    'premium-minimal': 'premium minimal editorial, controlled palette, strong composition, uncluttered details',
+    illustrated: 'polished editorial illustration, tactile textures, cohesive shapes, sophisticated not childish',
+  };
+  const prompt = `Create a ${input.pageCount}-page visual Story Book for With You Photo Studio / WYPS.
+
+Source label: ${input.sourceLabel}
+Suggested title: ${input.suggestedTitle || 'Choose the strongest concise title'}
+Book type direction: ${typeDirections[input.bookType]}
+Visual style direction: ${styleDirections[input.visualStyle]}
+
+Source idea:
+${input.source.trim().slice(0, 20_000)}
+
+Rules:
+- Keep the source idea and any supplied reference image as the source of truth. Inspect visible reference evidence before planning. Do not force Indoor onto Outdoor content or invent a package, price, place, client identity, outfit, or prop.
+- Write title, subtitle, narrative, and shotNote in natural Myanmar with necessary photography/business English only.
+- Every page must advance one coherent story. Avoid repeating the same message.
+- narrative should be short enough for a visual page: 2-4 compact sentences.
+- visualPrompt must be detailed English for an AI rough image. Describe composition, subject, environment, lighting, palette, lens/visual treatment, and mood.
+- Do not request text, logos, watermarks, captions, or letterforms inside generated images.
+- Keep people anonymous and natural unless the source explicitly contains a reference photo. Never claim a generated face is the real client.
+- styleBible must lock a consistent palette, lighting character, visual treatment, environment logic, wardrobe logic, and recurring details across all pages.
+- Return exactly ${input.pageCount} pages.
+
+WYPS context:
+${getStudioContext({ includePricing: false })}`;
+  const parts: any[] = [];
+  if (input.reference?.data && input.reference.mimeType.startsWith('image/')) {
+    parts.push({ inlineData: { mimeType: input.reference.mimeType, data: input.reference.data } });
+  }
+  parts.push({ text: prompt });
+  const response = await handleResponse(() => callGeminiProxy({
+    model: 'quality',
+    contents: [{ role: 'user', parts }],
+    config: {
+      responseMimeType: 'application/json',
+      responseSchema: {
+        type: Type.OBJECT,
+        properties: {
+          title: { type: Type.STRING },
+          subtitle: { type: Type.STRING },
+          styleBible: { type: Type.STRING },
+          pages: { type: Type.ARRAY, items: STORY_BOOK_PAGE_SCHEMA },
+        },
+        required: ['title', 'subtitle', 'styleBible', 'pages'],
+      },
+    },
+  }));
+  const parsed = JSON.parse(response.text || '{}') as StoryBookPlan;
+  if (!Array.isArray(parsed.pages) || parsed.pages.length !== input.pageCount) {
+    throw new Error('Story Book page structure မပြည့်စုံသေးပါ။ ပြန်စမ်းပေးပါ။');
+  }
+  return {
+    title: String(parsed.title || input.suggestedTitle || 'WYPS Visual Story Book').slice(0, 180),
+    subtitle: String(parsed.subtitle || '').slice(0, 300),
+    styleBible: String(parsed.styleBible || '').slice(0, 2500),
+    pages: parsed.pages.slice(0, input.pageCount).map((page) => ({
+      title: String(page.title || '').slice(0, 180),
+      narrative: String(page.narrative || '').slice(0, 1800),
+      visualPrompt: String(page.visualPrompt || '').slice(0, 3000),
+      shotNote: String(page.shotNote || '').slice(0, 1000),
+    })),
+  };
+};
+
+export const generateStoryBookImage = async (
+  page: Pick<StoryBookPage, 'title' | 'visualPrompt'>,
+  styleBible: string,
+  reference?: { mimeType: string; data: string } | null,
+  options: { signal?: AbortSignal } = {},
+): Promise<{ dataUrl: string; mimeType: string }> => {
+  const parts: any[] = [];
+  if (reference?.data && reference.mimeType.startsWith('image/')) {
+    parts.push({ inlineData: { mimeType: reference.mimeType, data: reference.data } });
+  }
+  parts.push({
+    text: `Generate one 4:5 vertical rough visual for a premium visual story book.
+
+Page: ${page.title}
+Locked visual style: ${styleBible}
+Page visual direction: ${page.visualPrompt}
+
+Requirements:
+- Produce a finished visual image only, without text, typography, logo, watermark, collage labels, borders, or UI.
+- Treat this as a concept visualization, not proof of a real client or completed shoot.
+- Keep the visual style, palette, lighting, wardrobe logic, and recurring details consistent with the locked style.
+- If a reference image is supplied, use only its clearly visible scene, wardrobe, color, and mood evidence. Keep people natural; do not add identity claims or invent hidden details.
+- Preserve Outdoor/Indoor evidence correctly. Do not turn an outdoor source into a studio scene or vice versa unless the page direction explicitly asks for a transition.`,
+  });
+
+  const response = await handleResponse(() => callGeminiProxy({
+    model: 'image',
+    contents: [{ role: 'user', parts }],
+    config: {
+      responseModalities: ['IMAGE'],
+      imageConfig: { aspectRatio: '4:5' },
+      maxOutputTokens: 2048,
+    },
+  }, options), 1, 1600);
+  const outputParts = response.candidates?.[0]?.content?.parts || [];
+  const imagePart = outputParts.find((part: any) => part?.inlineData?.data);
+  if (!imagePart?.inlineData?.data) throw new Error('ပုံအကြမ်း မထွက်လာသေးပါ။ ဒီ page ကို Retry လုပ်ပေးပါ။');
+  const mimeType = imagePart.inlineData.mimeType || 'image/png';
+  return { dataUrl: `data:${mimeType};base64,${imagePart.inlineData.data}`, mimeType };
 };
 
 export const generateSeasonalCampaign = async (season: string): Promise<{ title: string, ideas: string[], promotion: string }> => {

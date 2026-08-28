@@ -20,6 +20,7 @@ export enum AppTab {
   STRATEGY_PARTNER = 'strategy-partner',
   CONTRACT_GEN = 'contract-gen',
   CONCEPT_GEN = 'concept-gen',
+  STORY_BOOK = 'story-book',
   SAVED_LIBRARY = 'saved-library',
   COMPETITOR_ANALYSIS = 'competitor-analysis',
   VOICEOVER_GEN = 'voiceover-gen',

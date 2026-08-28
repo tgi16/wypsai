@@ -4,6 +4,7 @@ import ReactMarkdown from 'react-markdown';
 import {
   BrainCircuit,
   BookMarked,
+  BookOpen,
   BriefcaseBusiness,
   Check,
   Cloud,
@@ -64,6 +65,8 @@ import {
   releaseStrategyAttachment,
   STRATEGY_ATTACHMENT_ACCEPT,
 } from '../strategyAttachment';
+import { AppTab } from '../types';
+import { setStoryBookPrefill } from '../storyBook';
 
 type Message = StrategyMessage;
 
@@ -168,7 +171,7 @@ const deleteAllChatMessages = async (uid: string) => {
   }
 };
 
-const StrategyPartner: React.FC = () => {
+const StrategyPartner: React.FC<{ onNavigate?: (tab: AppTab) => void }> = ({ onNavigate }) => {
   const { user, login } = useFirebase();
   const [messages, setMessages] = useState<Message[]>(() => {
     const saved = readStrategyHistory(user?.uid);
@@ -395,6 +398,17 @@ const StrategyPartner: React.FC = () => {
       setCancelNotice('Copy မလုပ်နိုင်သေးပါ။ စာကို select လုပ်ပြီး ပြန်စမ်းကြည့်ပါ။');
       window.setTimeout(() => setCancelNotice(''), 3000);
     }
+  };
+
+  const createStoryBookFromMessage = (message: Message) => {
+    setStoryBookPrefill({
+      source: message.content,
+      sourceLabel: 'Strategy Partner AI answer',
+      sourceType: 'strategy',
+      suggestedTitle: message.content.replace(/[#*_`]/g, '').split(/[။.!?\n]/)[0].trim().slice(0, 90),
+      bookType: 'strategy-book',
+    });
+    onNavigate?.(AppTab.STORY_BOOK);
   };
 
   const handleInputKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -687,6 +701,17 @@ const StrategyPartner: React.FC = () => {
               {msg.role === 'model' && (
                 <button
                   type="button"
+                  onClick={() => createStoryBookFromMessage(msg)}
+                  className="absolute right-11 top-2 flex h-8 w-8 items-center justify-center rounded-lg border border-slate-600 bg-slate-900/80 text-slate-400 opacity-100 transition-colors hover:border-amber-500/50 hover:text-amber-300 sm:opacity-0 sm:group-hover:opacity-100 sm:focus:opacity-100"
+                  title="Create Story Book"
+                  aria-label="Create Story Book from answer"
+                >
+                  <BookOpen className="h-4 w-4" />
+                </button>
+              )}
+              {msg.role === 'model' && (
+                <button
+                  type="button"
                   onClick={() => void copyMessage(msg)}
                   className="absolute right-2 top-2 flex h-8 w-8 items-center justify-center rounded-lg border border-slate-600 bg-slate-900/80 text-slate-400 opacity-100 transition-colors hover:text-white sm:opacity-0 sm:group-hover:opacity-100 sm:focus:opacity-100"
                   title="Copy answer"
@@ -696,7 +721,7 @@ const StrategyPartner: React.FC = () => {
                 </button>
               )}
               {msg.role === 'model' ? (
-                <div className="prose prose-invert prose-sm max-w-none pr-7 prose-p:leading-relaxed prose-a:text-amber-400 sm:prose-base">
+                <div className="prose prose-invert prose-sm max-w-none pr-16 prose-p:leading-relaxed prose-a:text-amber-400 sm:prose-base">
                   <ReactMarkdown>{msg.content}</ReactMarkdown>
                 </div>
               ) : (

@@ -23,6 +23,7 @@ const TYPE_FILTERS: Array<GeneratedHistoryType | 'All'> = [
   '7-Day Plan',
   'Contract',
   'Concept',
+  'Story Book',
 ];
 
 const typeStyle: Record<string, string> = {
@@ -35,6 +36,7 @@ const typeStyle: Record<string, string> = {
   '7-Day Plan': 'border-purple-500/25 bg-purple-500/10 text-purple-300',
   Contract: 'border-cyan-500/25 bg-cyan-500/10 text-cyan-300',
   Concept: 'border-lime-500/25 bg-lime-500/10 text-lime-300',
+  'Story Book': 'border-yellow-500/25 bg-yellow-500/10 text-yellow-200',
   Other: 'border-slate-700 bg-slate-900 text-slate-300',
 };
 

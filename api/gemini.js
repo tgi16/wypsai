@@ -31,9 +31,24 @@ export default async function handler(req, res) {
       config: { ...config, abortSignal: requestAbortController.signal },
     });
 
+    const serializedCandidates = response.candidates?.map((candidate) => ({
+      content: {
+        parts: (candidate.content?.parts || []).map((part) => ({
+          text: part.text,
+          inlineData: part.inlineData ? {
+            data: part.inlineData.data,
+            mimeType: part.inlineData.mimeType,
+          } : undefined,
+        })),
+      },
+      finishReason: candidate.finishReason,
+      index: candidate.index,
+      groundingMetadata: candidate.groundingMetadata,
+    }));
+
     return res.status(200).json({
       text: response.text || "",
-      candidates: response.candidates || null,
+      candidates: serializedCandidates || null,
       usageMetadata: response.usageMetadata || null,
     });
   } catch (error) {

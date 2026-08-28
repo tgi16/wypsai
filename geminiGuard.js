@@ -4,12 +4,14 @@ const FIREBASE_CERT_URL = 'https://www.googleapis.com/robot/v1/metadata/x509/sec
 const ALLOWED_MODELS = new Set([
   'gemini-2.5-pro',
   'gemini-2.5-flash',
+  'gemini-2.5-flash-image',
   'gemini-2.5-flash-preview-tts',
 ]);
 const ALLOWED_CONFIG_KEYS = new Set([
   'responseMimeType',
   'responseSchema',
   'responseModalities',
+  'imageConfig',
   'speechConfig',
   'systemInstruction',
   'temperature',
@@ -175,6 +177,26 @@ export const sanitizeGeminiRequest = (body = {}) => {
       && Object.keys(tool.googleSearch).length === 0
     ));
     config.tools = googleSearchEnabled ? [{ googleSearch: {} }] : [];
+  }
+  if ('responseModalities' in config) {
+    const requested = Array.isArray(config.responseModalities)
+      ? config.responseModalities.map((item) => String(item).toUpperCase())
+      : [];
+    if (model === 'gemini-2.5-flash-image') {
+      config.responseModalities = requested.includes('IMAGE') ? ['IMAGE'] : [];
+    } else if (model === 'gemini-2.5-flash-preview-tts') {
+      config.responseModalities = requested.includes('AUDIO') ? ['AUDIO'] : [];
+    } else {
+      delete config.responseModalities;
+    }
+  }
+  if ('imageConfig' in config) {
+    const allowedRatios = new Set(['1:1', '3:4', '4:3', '4:5', '5:4', '9:16', '16:9']);
+    const aspectRatio = String(config.imageConfig?.aspectRatio || '');
+    config.imageConfig = model === 'gemini-2.5-flash-image' && allowedRatios.has(aspectRatio)
+      ? { aspectRatio }
+      : undefined;
+    if (!config.imageConfig) delete config.imageConfig;
   }
   config.maxOutputTokens = Math.min(
     MAX_OUTPUT_TOKENS,

@@ -3,8 +3,10 @@ import { generateConcept } from '../geminiService';
 import ReactMarkdown from 'react-markdown';
 import { saveGeneratedHistory } from '../generatedHistory';
 import { AppTab } from '../types';
+import { BookOpen, Save } from 'lucide-react';
+import { setStoryBookPrefill } from '../storyBook';
 
-const ConceptGenerator: React.FC = () => {
+const ConceptGenerator: React.FC<{ onNavigate?: (tab: AppTab) => void }> = ({ onNavigate }) => {
   const [vibe, setVibe] = useState('');
   const [loading, setLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -44,6 +46,18 @@ const ConceptGenerator: React.FC = () => {
     } finally {
       setIsSaving(false);
     }
+  };
+
+  const createStoryBook = () => {
+    if (!concept) return;
+    setStoryBookPrefill({
+      source: [`Customer vibe: ${vibe}`, '', concept].join('\n'),
+      sourceLabel: 'Moodboard & Concept result',
+      sourceType: 'moodboard',
+      suggestedTitle: vibe.slice(0, 90),
+      bookType: 'visual-concept',
+    });
+    onNavigate?.(AppTab.STORY_BOOK);
   };
 
   return (
@@ -92,15 +106,16 @@ const ConceptGenerator: React.FC = () => {
 
       {concept && (
         <div className="bg-slate-900/50 border border-slate-800 rounded-3xl p-6 md:p-8 animate-fade-in">
-          <div className="flex justify-between items-center mb-6">
+          <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <h3 className="text-xl font-bold text-white">အကြံပြုချက်များ</h3>
-            <button
-              onClick={handleSave}
-              disabled={isSaving}
-              className="bg-slate-800 hover:bg-slate-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2 disabled:opacity-50"
-            >
-              {isSaving ? 'Saving...' : '💾 Save to Library'}
-            </button>
+            <div className="flex gap-2 overflow-x-auto pb-1">
+              <button onClick={handleSave} disabled={isSaving} className="flex h-10 shrink-0 items-center gap-2 rounded-lg border border-slate-700 bg-slate-800 px-4 text-xs font-black text-white transition-colors hover:bg-slate-700 disabled:opacity-50">
+                <Save className="h-4 w-4" /> {isSaving ? 'Saving...' : 'Save'}
+              </button>
+              <button onClick={createStoryBook} className="flex h-10 shrink-0 items-center gap-2 rounded-lg bg-amber-500 px-4 text-xs font-black text-slate-950 transition-colors hover:bg-amber-400">
+                <BookOpen className="h-4 w-4" /> Story Book ပြောင်းမယ်
+              </button>
+            </div>
           </div>
           <div className="bg-slate-950 rounded-2xl p-6 md:p-8 border border-slate-800 prose prose-invert max-w-none burmese-text">
             <ReactMarkdown>{concept}</ReactMarkdown>

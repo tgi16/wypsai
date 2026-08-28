@@ -27,6 +27,7 @@ const VoiceoverGenerator = lazy(() => import('./pages/VoiceoverGenerator'));
 const StrategyPartner = lazy(() => import('./pages/StrategyPartner'));
 const ContractGenerator = lazy(() => import('./pages/ContractGenerator'));
 const ConceptGenerator = lazy(() => import('./pages/ConceptGenerator'));
+const StoryBookStudio = lazy(() => import('./pages/StoryBookStudio'));
 const SavedLibrary = lazy(() => import('./pages/SavedLibrary'));
 const ClientTimeline = lazy(() => import('./pages/ClientTimeline'));
 const ContentApprovalBoard = lazy(() => import('./pages/ContentApprovalBoard'));
@@ -195,11 +196,13 @@ const App: React.FC = () => {
       case AppTab.VOICEOVER_GEN:
         return <VoiceoverGenerator key="voiceover-gen" />;
       case AppTab.STRATEGY_PARTNER:
-        return <StrategyPartner key="strategy-partner" />;
+        return <StrategyPartner key="strategy-partner" onNavigate={navigateTo} />;
       case AppTab.CONTRACT_GEN:
         return <ContractGenerator key="contract-gen" />;
       case AppTab.CONCEPT_GEN:
-        return <ConceptGenerator key="concept-gen" />;
+        return <ConceptGenerator key="concept-gen" onNavigate={navigateTo} />;
+      case AppTab.STORY_BOOK:
+        return <StoryBookStudio key="story-book" />;
       case AppTab.SAVED_LIBRARY:
         return <SavedLibrary key="saved-library" onNavigate={navigateTo} />;
       case AppTab.CLIENT_TIMELINE:
@@ -272,7 +275,7 @@ const App: React.FC = () => {
         ref={mainRef}
         className="min-h-0 min-w-0 flex-1 overflow-y-auto p-3 pt-[calc(5.5rem+env(safe-area-inset-top))] pb-[calc(7.5rem+env(safe-area-inset-bottom))] scroll-smooth sm:p-4 sm:pt-[calc(5.75rem+env(safe-area-inset-top))] lg:p-10 xl:p-12"
       >
-        <div className={`mx-auto w-full transition-all duration-300 ${activeTab === AppTab.STRATEGY_PARTNER ? 'max-w-[90rem]' : 'max-w-6xl'}`}>
+          <div className={`mx-auto w-full transition-all duration-300 ${activeTab === AppTab.STRATEGY_PARTNER || activeTab === AppTab.STORY_BOOK ? 'max-w-[90rem]' : 'max-w-6xl'}`}>
           <ErrorBoundary>
             <Suspense fallback={<PageLoader />}>
               {renderContent()}

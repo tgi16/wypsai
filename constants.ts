@@ -1,6 +1,6 @@
 import { AppTab } from './types';
 
-export const APP_VERSION = '1.7.0';
+export const APP_VERSION = '1.8.0';
 
 export type SidebarMenuItem = {
   id: AppTab;
@@ -61,6 +61,7 @@ export const MENU_GROUPS: SidebarMenuGroup[] = [
       { id: AppTab.PREMIUM_PROMOTIONS, label: 'Premium Promos', icon: '🎁', subtitle: 'Promotion copy' },
       { id: AppTab.COMPETITOR_ANALYSIS, label: 'Competitor Analysis', icon: '🔭', subtitle: 'Competitor idea စစ်ရန်' },
       { id: AppTab.CONCEPT_GEN, label: 'Moodboard & Concept', icon: '✨', subtitle: 'Moodboard idea' },
+      { id: AppTab.STORY_BOOK, label: 'Story Book Studio', icon: '📚', subtitle: 'Idea ကို visual book ပြောင်းရန်' },
       { id: AppTab.PORTFOLIO_BIO, label: 'Portfolio Bio', icon: '👤', subtitle: 'Bio copy ရေးရန်' },
     ]
   }
@@ -69,6 +70,7 @@ export const MENU_GROUPS: SidebarMenuGroup[] = [
 export const PRICING = {
   'gemini-2.5-pro': { input: 1.25 / 1000000, output: 10.0 / 1000000 },
   'gemini-2.5-flash': { input: 0.075 / 1000000, output: 0.30 / 1000000 },
+  'gemini-2.5-flash-image': { input: 0.30 / 1000000, output: 30.0 / 1000000 },
   'gemini-2.5-flash-preview-tts': { input: 0.1 / 1000000, output: 0.1 / 1000000 },
   'gemini-1.5-pro': { input: 3.5 / 1000000, output: 10.5 / 1000000 },
   'gemini-1.5-flash': { input: 0.075 / 1000000, output: 0.3 / 1000000 },

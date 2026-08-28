@@ -12,6 +12,7 @@ export type GeneratedHistoryType =
   | '7-Day Plan'
   | 'Contract'
   | 'Concept'
+  | 'Story Book'
   | 'Other';
 
 export type GeneratedHistoryItem = {

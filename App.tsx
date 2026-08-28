@@ -272,7 +272,7 @@ const App: React.FC = () => {
         ref={mainRef}
         className="min-h-0 min-w-0 flex-1 overflow-y-auto p-3 pt-[calc(5.5rem+env(safe-area-inset-top))] pb-[calc(7.5rem+env(safe-area-inset-bottom))] scroll-smooth sm:p-4 sm:pt-[calc(5.75rem+env(safe-area-inset-top))] lg:p-10 xl:p-12"
       >
-        <div className="mx-auto w-full max-w-6xl transition-all duration-300">
+        <div className={`mx-auto w-full transition-all duration-300 ${activeTab === AppTab.STRATEGY_PARTNER ? 'max-w-[90rem]' : 'max-w-6xl'}`}>
           <ErrorBoundary>
             <Suspense fallback={<PageLoader />}>
               {renderContent()}

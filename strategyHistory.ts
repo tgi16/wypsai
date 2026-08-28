@@ -4,6 +4,13 @@ export type StrategyMessage = {
   content: string;
 };
 
+export type StrategyModelMessage = {
+  role: 'user' | 'model';
+  parts: Array<{ text: string }>;
+};
+
+export type StrategyAnswerMode = 'general' | 'business' | 'creative' | 'action';
+
 type StorageRead = (key: string) => string | null;
 type StorageWrite = (key: string, value: string) => void;
 
@@ -37,6 +44,29 @@ export const mergeStrategyMessages = (...groups: StrategyMessage[][]) => {
     seen.add(message.id);
     return Boolean(message.content?.trim());
   }).slice(-MAX_MESSAGES);
+};
+
+export const buildStrategyModelHistory = (
+  messages: StrategyMessage[],
+  maxCharacters = 100_000,
+): StrategyModelMessage[] => {
+  const selected: StrategyMessage[] = [];
+  let characters = 0;
+
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    const message = messages[index];
+    const size = message.content.length;
+    if (selected.length && characters + size > maxCharacters) break;
+    selected.unshift(message);
+    characters += size;
+  }
+
+  while (selected[0]?.role === 'model') selected.shift();
+
+  return selected.map((message) => ({
+    role: message.role,
+    parts: [{ text: message.content }],
+  }));
 };
 
 const trimForStorage = (messages: StrategyMessage[]) => {

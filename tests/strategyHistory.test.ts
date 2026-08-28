@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  buildStrategyModelHistory,
   mergeStrategyMessages,
   readStrategyHistory,
   strategyHistoryKey,
@@ -45,4 +46,17 @@ test('Strategy history storage failures do not stop chat submission', () => {
   assert.doesNotThrow(() => writeStrategyHistory([message], null, () => {
     throw new Error('Storage quota exceeded');
   }));
+});
+
+test('Strategy model history keeps newest context within a safe character budget', () => {
+  const messages = [
+    { id: '1', role: 'user' as const, content: 'a'.repeat(60) },
+    { id: '2', role: 'model' as const, content: 'b'.repeat(60) },
+    { id: '3', role: 'user' as const, content: 'latest question' },
+  ];
+  const history = buildStrategyModelHistory(messages, 80);
+
+  assert.equal(history.length, 1);
+  assert.equal(history[0].role, 'user');
+  assert.equal(history[0].parts[0].text, 'latest question');
 });

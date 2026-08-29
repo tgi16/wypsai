@@ -92,12 +92,7 @@ service cloud.firestore {
         allow read, write: if isOwner(userId);
 
         match /pages/{pageId} {
-          allow read, delete: if isOwner(userId);
-          allow create, update: if isOwner(userId)
-            && request.resource.data.uid == userId
-            && request.resource.data.projectId == storyBookId
-            && request.resource.data.imageDataUrl is string
-            && request.resource.data.imageDataUrl.size() < 850000;
+          allow read, write: if isOwner(userId);
         }
       }
     }

@@ -71,7 +71,7 @@ export const subscribeStoryBooks = (
   (error) => onError?.(error),
 );
 
-export const saveStoryBookCloud = async (project: StoryBookProject, user: User) => {
+const writeStoryBookCloud = async (project: StoryBookProject, user: User) => {
   const uploadedPages = await Promise.all(project.pages.map(async (page) => {
     if (page.imageDataUrl?.startsWith('data:image/')) {
       const imageDataUrl = await firestoreImage(page.imageDataUrl, page.id);
@@ -98,6 +98,16 @@ export const saveStoryBookCloud = async (project: StoryBookProject, user: User) 
     updatedAt: serverTimestamp(),
   });
   return { ...cloudProject, pages: uploadedPages };
+};
+
+export const saveStoryBookCloud = async (project: StoryBookProject, user: User) => {
+  try {
+    return await writeStoryBookCloud(project, user);
+  } catch (error: any) {
+    if (error?.code !== 'permission-denied' && !/insufficient permissions/i.test(error?.message || '')) throw error;
+    await user.getIdToken(true);
+    return writeStoryBookCloud(project, user);
+  }
 };
 
 export const deleteStoryBookCloud = async (project: StoryBookProject, user: User) => {

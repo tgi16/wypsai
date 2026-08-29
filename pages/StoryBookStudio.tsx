@@ -67,6 +67,11 @@ const mergeProjects = (...groups: StoryBookProject[][]) => {
 
 const pageImage = (page: StoryBookPage) => page.imageDataUrl || page.imageUrl || '';
 const projectId = () => `story-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+const cloudErrorMessage = (error: any, fallback: string) => (
+  error?.code === 'permission-denied' || /insufficient permissions/i.test(error?.message || '')
+    ? 'Private cloud permission ပြန်ချိတ်နေပါတယ်။ Google Logout လုပ်ပြီး Login ပြန်ဝင်ကာ Save ကိုတစ်ကြိမ်ပြန်နှိပ်ပေးပါ။ လက်ရှိ Story Book ကို မဖျက်ထားပါ။'
+    : error?.message || fallback
+);
 
 const StoryPage: React.FC<{ page: StoryBookPage; project: StoryBookProject; exportMode?: boolean }> = ({ page, project, exportMode }) => {
   const image = pageImage(page);
@@ -262,7 +267,7 @@ const StoryBookStudio: React.FC = () => {
       if (!silent) showNotice(account ? 'Story Book ကို private cloud မှာသိမ်းပြီးပါပြီ။' : 'စာသား project ကို device မှာသိမ်းပြီးပါပြီ။');
       return saved;
     } catch (saveError: any) {
-      setError(saveError?.message || 'Story Book သိမ်းလို့မရသေးပါ။');
+      setError(cloudErrorMessage(saveError, 'Story Book သိမ်းလို့မရသေးပါ။'));
       return target;
     } finally {
       setIsSaving(false);
@@ -421,7 +426,7 @@ const StoryBookStudio: React.FC = () => {
       if (project?.id === item.id) setProject(null);
       showNotice('Story Book ကိုဖျက်ပြီးပါပြီ။');
     } catch (deleteError: any) {
-      setError(deleteError?.message || 'Story Book ဖျက်လို့မရသေးပါ။');
+      setError(cloudErrorMessage(deleteError, 'Story Book ဖျက်လို့မရသေးပါ။'));
     }
   };
 
